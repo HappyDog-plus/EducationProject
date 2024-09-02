@@ -1,0 +1,11 @@
+Only use <image> to split the prompt. But when load the history, it doesn't work.
+
+Test conversation. Generate some HUMAN words:
+HUMAN: Hi! Nice to meet you.
+AI: Nice to meet you too! What can I help you with today?
+HUMAN: My name is Peter. Nice to see you.
+AI: Nice to see you too, Peter. How can I help you today?
+HUMAN: I have some questions to ask you? Are you available now?
+AI: Yes, I'm available now. Please feel free to ask your questions.
+HUMAN: My coffee bar open. Can you write a slogan for me?
+
