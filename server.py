@@ -61,7 +61,7 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 if __name__ == "__main__":
     # initialize chatbot
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model_path = "G:\\Research\\EyeFM_Education\\LLaVA\\pretrained_model\\llava-v1.5-7b"
+    model_path = "H:\\Research\\EyeFM_Education\\LLaVA\\pretrained_model\\llava-v1.5-7b"
     model_name="llava-v1.5-7b"
     llm = Custom_LLaVA(model_path=model_path, model_base=None, model_name=model_name, load_4bit=False, load_8bit=True, device=device)
     

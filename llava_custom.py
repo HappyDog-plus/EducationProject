@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
 # import asyncio
 import warnings
 warnings.filterwarnings("ignore")
@@ -23,7 +23,6 @@ import torch
 
 
 class Custom_LLaVA(LLM):
-    
     model_name:        str = None
     temperature:       float = 0.7
     top_p:             float = 0.1
@@ -33,7 +32,6 @@ class Custom_LLaVA(LLM):
     image_processor:   Any = None
     callback_manager:  Any = None
 
-    
     def __init__(self, model_path, model_name, load_8bit, load_4bit, device, model_base=None, **kwargs):
         super().__init__()
         self.model_name = str(model_name)
@@ -46,35 +44,33 @@ class Custom_LLaVA(LLM):
                                                                                         device=device
                                                                                     )
 
-
+    # Sequence[BaseMessage] |
     def invoke(
                 self,
-                input: Sequence[BaseMessage] | ChatPromptValue,
+                input: ChatPromptValue,
                 history: Dict[str, Any],
                 run_manager: Optional[CallbackManagerForLLMRun] = None,
                 **kwargs
-              ) -> LLMResult:
+              ) -> Union[LLMResult, str]:
         if isinstance(input, ChatPromptValue):
             input = input.messages
         # Delete the image base64 part of the input prompt
         human_prompt = input[-1].content
         human_prompt, imgs = self.preprocess_prompt(human_prompt)
         # set the input window size
-        conv_window_size = 5
+        conv_window_size = 2
         history_convs = input[:-1] if len(input) < conv_window_size else input[-conv_window_size : -1]
         prompt = self.combine_messages_list(history_convs) + "HUMAN: " + human_prompt + "\nAI:"
-        print(prompt)
         # stop word
         stopwords = ["HUMAN", "human", "Human", "SYSTEM", "System", "system", "USER", "user", "User"]
         output = self._call(prompt=prompt, images=imgs)
         output = self.postprocess_response(response=output, stopwords=stopwords)
-        print(output)
         # Maybe run with no history
         if history['configurable']:    
             history['configurable']['message_history'].add_user_message(human_prompt)
             history['configurable']['message_history'].add_ai_message(output)
-        return LLMResult(generations=[[Generation(text=output)]])
-
+        # return LLMResult(generations=[[Generation(text=output)]])
+        return output
 
     def combine_messages_list(self, messages: List[BaseMessage]) -> str:
         full_text = ""
@@ -83,7 +79,6 @@ class Custom_LLaVA(LLM):
         # remove the <image> label in previous conversations
         full_text = re.sub("<image>", "", full_text)
         return full_text
-    
 
     def postprocess_response(self, response: str, stopwords: List[str]) -> str:
         response1 = re.sub("ai:", "", response, re.IGNORECASE)
@@ -98,7 +93,6 @@ class Custom_LLaVA(LLM):
         else:
             response2 = response1 
         return response2.strip()
-    
 
     def preprocess_prompt(self, prompt: str) -> Tuple[str, List[str]]:
         pattern = re.compile(r'<img>.*?</img>', re.DOTALL)
@@ -111,13 +105,12 @@ class Custom_LLaVA(LLM):
             imgs.append(img)
         return (prompt, imgs)
 
-
     def _call(
                 self,
                 prompt: str,
                 images: Optional[List[str]] = None,
-                # stop: Optional[List[str]] = None,
-                # run_manager: Optional[CallbackManagerForLLMRun] = None,
+                stop: Optional[List[str]] = None,
+                run_manager: Optional[CallbackManagerForLLMRun] = None,
                 **kwargs: Any,
              ) -> str:
         temperature, top_p, max_new_tokens = self.temperature, self.top_p, self.max_new_tokens
@@ -162,7 +155,6 @@ class Custom_LLaVA(LLM):
         response = self.tokenizer.decode(output[0], skip_special_tokens=True)
         return response
 
-
     def _stream(
                     self,
                     prompt: str,
@@ -176,16 +168,13 @@ class Custom_LLaVA(LLM):
         for i in range(0, len(output), chunk_size):
             yield GenerationChunk(text=output[i:i + chunk_size])
 
-
     @property
     def _identifying_params(self) -> Dict[str, Any]:
         return { }
 
-
     @property
     def _llm_type(self) -> str:
         return "LLaVA(MultiModal Large Language Model)"
-
 
 
 def image_to_base64(image: Image.Image) -> str:

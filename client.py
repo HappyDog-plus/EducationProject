@@ -28,7 +28,8 @@ if __name__ == "__main__":
     img_path = r"image\54.jpg"
     img_base64 = img_encode(img_path)
     # data = { "input_text": "My name is Peter. Nice to see you.", "image": ""}
-    # data = { "input_text": "I have some questions to ask you? Are you available now?", "image": ""}
+    # break   +   delete_history
+    data = { "input_text": "I have some questions to ask you? Are you available now?", "image": "", "status": 0}
     # data = { "input_text": "My coffee bar open. Can you write a slogan for me?", "image": ""}
     # data = { "input_text": "Can you describe the image for me.", "image": img_base64}
     # data = { "input_text": "OK. That's a very nice slogan. Thank you very much.", "image": ""}
