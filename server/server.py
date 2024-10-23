@@ -17,6 +17,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from config import set_environment
 from langchain_openai import ChatOpenAI
+from pydub import AudioSegment
 
 
 def delete_file(file_path):
@@ -48,6 +49,7 @@ async def lifespan(app: FastAPI):
     if app.state.model_type == 0:
         model_path = r"G:\Research\ModelWeights\llava-v1.5-7b"
         model_name="llava-v1.5-7b"
+        # Lora(set base model and adapter weights) 
         # base_path = "/workspace/LLaVA/PretrainedModel/llava-v1.5-7b"
         llm = Custom_LLaVA(model_path=model_path, 
                            model_base=None, 
@@ -103,10 +105,22 @@ async def upload_audio(file: UploadFile = File(...)):
         return {"error": "File format not supported. Please upload a .wav or a .mp3 file."}
     print("-"*50, "\nAudio Recognize Start\n", "-"*50)
     # save audio file
-    with open(f".\\audio_saved\\uploaded_{file.filename}", "wb") as buffer:
+    audio_path = f".\\audio_saved\\{file.filename}"
+    with open(audio_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+    # convert .wav to .mp3
+    if file.filename.endswith(".wav"):
+        # load .wav file
+        audio = AudioSegment.from_wav(audio_path)
+        # set sampling rate
+        audio = audio.set_frame_rate(16000)
+        audio_path0 = Path("audio_saved") / (file.filename.split('.')[0] + ".mp3")
+        # export .mp3 audio file
+        audio.export(audio_path0, format="mp3")
+        # delete .wav file
+        delete_file(audio_path)
+        audio_path = audio_path0
     # recognize texts
-    audio_path = f".\\audio_saved\\uploaded_{file.filename}"
     result, error_code = xunfei_recognize(audio_path)
     # delete audio file, release space
     delete_file(audio_path)

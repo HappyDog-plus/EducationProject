@@ -28,11 +28,11 @@ if __name__ == "__main__":
     # url = "https://4okpi1941999.vicp.fun/model"
     url = "http://localhost:8000/recognize"
 
-    # Test AI 
+    # # Test AI 
 
     # img_path = r".\image\test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Describe this image:", "image": img_base64}
+    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Can you remember my name?", "image": ""}
     # response = requests.post(url, json=data0)
     # if response.status_code == 200:
     #     result = response.json()
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     #     print("Failed: ", response.status_code)
 
     # Test XunFei Recognize API
-    file_path = r'.\audio\test_wav.wav'
+    file_path = r"audio\test_wav.wav"
     with open(file_path, 'rb') as f:
         response = requests.post(url, files={"file": f})
     print(response.json())
