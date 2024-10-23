@@ -1,4 +1,4 @@
-from typing import Any, Dict, Iterator, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
 # import asyncio
 import warnings
 warnings.filterwarnings("ignore")
@@ -8,10 +8,6 @@ import io
 import re
 from langchain_core.language_models.llms import LLM
 from langchain_core.outputs import GenerationChunk
-# from langchain_core.prompts import ChatPromptTemplate
-# from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-# from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
-# from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain.schema import LLMResult, BaseMessage, Generation
@@ -44,7 +40,6 @@ class Custom_LLaVA(LLM):
                                                                                         device=device
                                                                                     )
 
-    # Sequence[BaseMessage] |
     def invoke(
                 self,
                 input: ChatPromptValue,
