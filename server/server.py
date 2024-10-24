@@ -32,7 +32,7 @@ def delete_file(file_path):
         print(f"File deleting error: {e}")
 
 
-class RequestData(BaseModel):
+class Model_Data(BaseModel):
     user_id: str
     time_span: str
     mode_code: int
@@ -45,9 +45,9 @@ async def lifespan(app: FastAPI):
     print("-"*50, "\nModel backend is starting up...\n", "-"*50)
     # initialize chatbot (local_model: 0, openai_api: 1)
     app.state.model_type = 1
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
     if app.state.model_type == 0:
-        model_path = r"G:\Research\ModelWeights\llava-v1.5-7b"
+        model_path = r"/data/home/yangjiale/WorkSpace/EyeFM_Education/PretrainedModel/llava-v1.5-7b"
         model_name="llava-v1.5-7b"
         # Lora(set base model and adapter weights) 
         # base_path = "/workspace/LLaVA/PretrainedModel/llava-v1.5-7b"
@@ -100,12 +100,11 @@ app = FastAPI(lifespan=lifespan)
 # convert .wav audio to texts
 @app.post("/recognize")
 async def upload_audio(file: UploadFile = File(...)):
-    print(file)
     if not file.filename.endswith(('.wav', '.mp3')):
         return {"error": "File format not supported. Please upload a .wav or a .mp3 file."}
     print("-"*50, "\nAudio Recognize Start\n", "-"*50)
     # save audio file
-    audio_path = f".\\audio_saved\\{file.filename}"
+    audio_path = Path("audio_saved") / file.filename
     with open(audio_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     # convert .wav to .mp3
@@ -130,7 +129,7 @@ async def upload_audio(file: UploadFile = File(...)):
 
 
 @app.post("/model")
-async def model_inference(data: RequestData):
+async def model_inference(data: Model_Data):
     if data.mode_code == 0:
         chatbot = app.state.chatbot
         config = app.state.config_history
@@ -182,6 +181,32 @@ async def model_inference(data: RequestData):
         pass
     else:
         pass
+
+
+class Course_Invoke_Data(BaseModel):
+    user_id: str
+    time_span: str
+    question: str
+    correct_ans: str
+    user_ans: str 
+
+
+@app.post("/course_invoke")
+async def model_inference(data: Course_Invoke_Data):
+    print("-"*50, "\nCourse Excercise Judgement Start\n", "-"*50)
+    print(  "\nuser_id: ", data.user_id, 
+            "\ntime_span: ", data.time_span, 
+            "\nquestion: ", data.question, 
+            "\ncorrect_ans: ", data.correct_ans, 
+            "\nuser_ans: ", data.user_ans
+          )
+    print("-"*50, "\nCourse Excercise Judgement End\n", "-"*50)
+    return {
+            "user_id": data.user_id,
+            "time_span": str(datetime.now()),
+            "res": datetime.now().second % 2
+           }
+
 
 # def get_response_text(response: LLMResult) -> str:
 #     full_text = ""

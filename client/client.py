@@ -25,33 +25,35 @@ def img_encode(img_path: str) -> str:
 if __name__ == "__main__":
     
 
-    # url = "https://4okpi1941999.vicp.fun/model"
-    url = "http://localhost:8000/recognize"
+    url = "https://4okpi1941999.vicp.fun/course_invoke"
+    # url = "http://0.0.0.0:8000/model"
 
-    # # Test AI 
-
-    # img_path = r".\image\test_img.jpg"
+    # # Test model
+    # img_path = r"image/test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Can you remember my name?", "image": ""}
+    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Describe this image: ", "image": img_base64}
     # response = requests.post(url, json=data0)
     # if response.status_code == 200:
     #     result = response.json()
     #     print(result)
-    #     # print("(Return response)\n", result['message'])
     # else:
     #     print("Failed: ", response.status_code)
 
-    # data1 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Do you know my name ?", "image": ""}
-    # response = requests.post(url, json=data1)
-    # if response.status_code == 200:
-    #     result = response.json()
-    #     print(result)
-    #     # print("(Return response)\n", result['message'])
-    # else:
-    #     print("Failed: ", response.status_code)
 
     # Test XunFei Recognize API
-    file_path = r"audio\test_wav.wav"
-    with open(file_path, 'rb') as f:
-        response = requests.post(url, files={"file": f})
+    # file_path = r"audio/test_wav.wav"
+    # with open(file_path, 'rb') as f:
+    #     response = requests.post(url, files={"file": f})
+    # print(response.json())
+
+
+    # Test in-class exercise judge model.
+    data1 = {
+                "user_id": "12345678",
+                "time_span": "2024-09-20 16:43:20.0000",
+                "question": "What’s the answer of 1 + 1?",
+                "correct_ans": "The answer is 2.",
+                "user_ans": "I don’t know."
+            }
+    response = requests.post(url, json=data1)
     print(response.json())
