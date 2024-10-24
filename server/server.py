@@ -18,18 +18,33 @@ from contextlib import asynccontextmanager
 from config import set_environment
 from langchain_openai import ChatOpenAI
 from pydub import AudioSegment
+import logging
 
+def current_time():
+    t = datetime.now()
+    return str(t.year)+"_"+str(t.month)+"_"+str(t.day)+"_"+str(t.hour)+"_"+str(t.minute)
+
+# Create logger object
+logging.basicConfig(
+                    level=logging.INFO,
+                    filename=Path("log") / (current_time() + ".log"),
+                    filemode='a',
+                    datefmt='%Y/%m/%d %H:%M:%S',
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(module)s - %(message)s',
+                    encoding='utf-8'
+                    )
+logger = logging.getLogger(__name__)
 
 def delete_file(file_path):
     try:
         file = Path(file_path)
         if file.is_file(): 
-            file.unlink()  
-            print(f"File {file_path} is deleted successfully.")
+            file.unlink()
+            logger.info(f"File {file_path} is deleted successfully.")
         else:
-            print(f"File {file_path} does not exist.")
+            logger.warning(f"File {file_path} does not exist.")
     except Exception as e:
-        print(f"File deleting error: {e}")
+        logger.error(f"File deleting error: {e}")
 
 
 class Model_Data(BaseModel):
@@ -42,7 +57,7 @@ class Model_Data(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("-"*50, "\nModel backend is starting up...\n", "-"*50)
+    logger.info("Model backend is starting up...")
     # initialize chatbot (local_model: 0, openai_api: 1)
     app.state.model_type = 1
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
@@ -89,6 +104,7 @@ async def lifespan(app: FastAPI):
     app.state.config_history = config
     yield 
     print("-"*50, "\nModel backend is closing ...\n", "-"*50)
+    logger.info("Model backend is closing ...")
     del llm
     del with_message_history
     del device
@@ -102,7 +118,7 @@ app = FastAPI(lifespan=lifespan)
 async def upload_audio(file: UploadFile = File(...)):
     if not file.filename.endswith(('.wav', '.mp3')):
         return {"error": "File format not supported. Please upload a .wav or a .mp3 file."}
-    print("-"*50, "\nAudio Recognize Start\n", "-"*50)
+    logger.info("Audio Recognize Start")
     # save audio file
     audio_path = Path("audio_saved") / file.filename
     with open(audio_path, "wb") as buffer:
@@ -123,8 +139,8 @@ async def upload_audio(file: UploadFile = File(...)):
     result, error_code = xunfei_recognize(audio_path)
     # delete audio file, release space
     delete_file(audio_path)
-    print("Text:", result, "\nError Code:", error_code)
-    print("-"*50, "\nAudio Recognize End\n", "-"*50)
+    logger.info("\nText:" + result + "\nError_Code:" + str(error_code))
+    logger.info("Audio Recognize End")
     return {"output_text": result, "error_code": error_code}
 
 
@@ -154,19 +170,21 @@ async def model_inference(data: Model_Data):
                                     )
             else:
                 message = HumanMessage(content = data.input_text)
-        print("-"*50, "\nModel Inference Start\n", "-"*50)
-        print("\nuser_id: ", data.user_id, 
-              "\ntime_span: ", data.time_span, 
-              "\nmode_code: ", int(data.mode_code), 
-              "\ninput_text: ", data.input_text, 
-              "\nimage: ", data.image[-100:])
+        logger.info("Model Inference Start")
+        logger.info(
+                    "\nuser_id: " + data.user_id +  
+                    "\ntime_span: " + data.time_span + 
+                    "\nmode_code: " + str(data.mode_code) + 
+                    "\ninput_text: " + data.input_text + 
+                    "\nimage: " + data.image[-100:]
+                    )
         start = time.time()
         response = chatbot.invoke(message, config=config)
         if app.state.model_type == 1:
             response = response.content
         end = time.time()
-        print("Inference time: ", end - start)
-        print("-"*50, "\nModel Inference End\n", "-"*50)
+        logger.info("Inference time: " + str(end - start))
+        logger.info("Model Inference End")
         # Extract response text from LLMResult object
         # full_text = get_response_text(response)
         return {"user_id": data.user_id, 
@@ -193,14 +211,15 @@ class Course_Invoke_Data(BaseModel):
 
 @app.post("/course_invoke")
 async def model_inference(data: Course_Invoke_Data):
-    print("-"*50, "\nCourse Excercise Judgement Start\n", "-"*50)
-    print(  "\nuser_id: ", data.user_id, 
-            "\ntime_span: ", data.time_span, 
-            "\nquestion: ", data.question, 
-            "\ncorrect_ans: ", data.correct_ans, 
-            "\nuser_ans: ", data.user_ans
-          )
-    print("-"*50, "\nCourse Excercise Judgement End\n", "-"*50)
+    logger.info("Course Excercise Judgement Start")
+    logger.info(    
+                    "\nuser_id: " + data.user_id + 
+                    "\ntime_span: " + data.time_span + 
+                    "\nquestion: " + data.question + 
+                    "\ncorrect_ans: " + data.correct_ans + 
+                    "\nuser_ans: " + data.user_ans
+                )
+    logger.info("Course Excercise Judgement End")
     return {
             "user_id": data.user_id,
             "time_span": str(datetime.now()),

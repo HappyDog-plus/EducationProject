@@ -6,7 +6,7 @@ def set_environment():
     # os.environ['OPENAI_API_KEY'] = ""
 
     # OpenAI
-    os.environ['OPENAI_API_KEY'] = "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"
+    os.environ['OPENAI_API_KEY'] = "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"
     
     # Langchain
     # os.environ["LANGCHAIN_TRACING_V2"] = ""

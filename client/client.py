@@ -4,6 +4,7 @@ from PIL import Image
 import io
 from typing import Any, Dict, Iterator, List, Optional, Sequence
 from datetime import datetime
+from pathlib import Path
 
 
 def image_to_base64(image: Image.Image) -> str:
@@ -25,35 +26,31 @@ def img_encode(img_path: str) -> str:
 if __name__ == "__main__":
     
 
-    url = "https://4okpi1941999.vicp.fun/course_invoke"
-    # url = "http://0.0.0.0:8000/model"
+    # url = "https://4okpi1941999.vicp.fun/course_invoke"
+    url = "http://127.0.0.1:8000/recognize"
 
     # # Test model
-    # img_path = r"image/test_img.jpg"
+    # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Describe this image: ", "image": img_base64}
+    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Hello! how are you?", "image": ""}
     # response = requests.post(url, json=data0)
-    # if response.status_code == 200:
-    #     result = response.json()
-    #     print(result)
-    # else:
-    #     print("Failed: ", response.status_code)
-
-
-    # Test XunFei Recognize API
-    # file_path = r"audio/test_wav.wav"
-    # with open(file_path, 'rb') as f:
-    #     response = requests.post(url, files={"file": f})
     # print(response.json())
 
 
-    # Test in-class exercise judge model.
-    data1 = {
-                "user_id": "12345678",
-                "time_span": "2024-09-20 16:43:20.0000",
-                "question": "What’s the answer of 1 + 1?",
-                "correct_ans": "The answer is 2.",
-                "user_ans": "I don’t know."
-            }
-    response = requests.post(url, json=data1)
+    # Test XunFei Recognize API
+    file_path = Path("audio") / "test_wav.wav"
+    with open(file_path, 'rb') as f:
+        response = requests.post(url, files={"file": f})
     print(response.json())
+
+
+    # Test in-class exercise judge model.
+    # data1 = {
+    #             "user_id": "12345678",
+    #             "time_span": "2024-09-20 16:43:20.0000",
+    #             "question": "What's the answer of 1 + 1?",
+    #             "correct_ans": "The answer is 2.",
+    #             "user_ans": "I don't know."
+    #         }
+    # response = requests.post(url, json=data1)
+    # print(response.json())
