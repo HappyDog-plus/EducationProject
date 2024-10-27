@@ -19,6 +19,8 @@ from config import set_environment
 from langchain_openai import ChatOpenAI
 from pydub import AudioSegment
 import logging
+import os
+
 
 def current_time():
     t = datetime.now()
@@ -58,6 +60,11 @@ class Model_Data(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Model backend is starting up...")
+    # create audio folder and log folder
+    if not os.path.exists("audio_saved"):
+        os.makedirs("audio_saved")
+    if not os.path.exists("log"):
+        os.makedirs("log")
     # initialize chatbot (local_model: 0, openai_api: 1)
     app.state.model_type = 1
     device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
