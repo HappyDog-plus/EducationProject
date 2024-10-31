@@ -214,25 +214,64 @@ class Course_Invoke_Data(BaseModel):
     question: str
     correct_ans: str
     user_ans: str 
+ 
 
+# Function to invoke OpenAI and get a semantic comparison  
+async def is_semantically_correct(user_ans: str, correct_ans: str, app: FastAPI) -> bool:  
+    prompt = (  
+        f"Are the following two answers semantically the same?\n"  
+        f"Correct Answer: {correct_ans}\n"  
+        f"User Answer: {user_ans}"  
+    )  
+    config = {"configurable": {"session_id": "idx1"}}  
+    response = await app.state.chatbot.invoke([HumanMessage(content=prompt)], config=config)    
+    return response.content.lower() == "true"  
+  
+# Function to invoke OpenAI and get an explanation  
+async def get_explanation(prompt: str, app: FastAPI) -> str:  
+    config = {"configurable": {"session_id": "idx1"}}  
+    response = await app.state.chatbot.invoke([HumanMessage(content=prompt)], config=config)  
+    return response.content
 
-@app.post("/course_invoke")
-async def model_inference(data: Course_Invoke_Data):
-    logger.info("Course Excercise Judgement Start")
+@app.post("/course_invoke")   
+async def course_inference(data: Course_Invoke_Data):   
+    logger.info("Course Exercise Judgement Start")   
     logger.info(    
-                    "\nuser_id: " + data.user_id + 
-                    "\ntime_span: " + data.time_span + 
-                    "\nquestion: " + data.question + 
-                    "\ncorrect_ans: " + data.correct_ans + 
-                    "\nuser_ans: " + data.user_ans
-                )
-    logger.info("Course Excercise Judgement End")
-    return {
-            "user_id": data.user_id,
-            "time_span": str(datetime.now()),
-            "res": datetime.now().second % 2
-           }
-
+                "\nuser_id: " + data.user_id + 
+                "\ntime_span: " + data.time_span + 
+                "\nquestion: " + data.question + 
+                "\ncorrect_ans: " + data.correct_ans + 
+                "\nuser_ans: " + data.user_ans
+                )   
+  
+    # Use OpenAI to compare user_ans and correct_ans semantically  
+    is_semantically_correct_result = await is_semantically_correct(data.user_ans, data.correct_ans)    
+      
+    if not is_semantically_correct_result:  
+        # Generate explanation if semantically incorrect  
+        prompt = (  
+            f"Compare the following answers and provide an explanation why they are not semantically the same:\n"  
+            f"Correct Answer: {data.correct_ans}\n"  
+            f"User Answer: {data.user_ans}"  
+        )  
+        explanation = await get_explanation(prompt)  
+          
+        result = {  
+            "user_id": data.user_id,  
+            "time_span": str(datetime.now()),  
+            "res": 0,  
+            "explanation": explanation  
+        }  
+    else:  
+        result = {  
+            "user_id": data.user_id,  
+            "time_span": str(datetime.now()),  
+            "res": 1,  
+            "explanation": "Your answer is semantically correct!"  
+        }  
+      
+    logger.info("Course Exercise Judgement End")   
+    return result   
 
 # def get_response_text(response: LLMResult) -> str:
 #     full_text = ""
@@ -240,6 +279,7 @@ async def model_inference(data: Course_Invoke_Data):
 #         for gen in generation:
 #             full_text += gen.text
 #     return full_text
+
 
 
 if __name__ == "__main__":
