@@ -31,8 +31,8 @@ ckpts*
 # DevContainer
 !.devcontainer/*
 
-# Ignore local case reports data
+# Local data
 local_data/CaseReportImgs/
-
-# excel
-*.xlsx
+local_data/VectorStore/
+local_data/*.xlsx
+local_data/ModelWeights

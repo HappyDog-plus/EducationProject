@@ -56,9 +56,9 @@ def img_parse(img_idxs: str):
 
 
 def main():
-    file_path = r"G:\Research\EducationProject\local_data\CaseReports.xlsx"
-    json_out_path = r"G:\Research\EducationProject\local_data\CaseReports.json"
-    cat_out_path = r"G:\Research\EducationProject\local_data\Categories.json"
+    file_path = r"CaseReports.xlsx"
+    json_out_path = r"CaseReports.json"
+    cat_out_path = r"CaseReportCategories.json"
     collector = []
     keys = ["idx", "label", "context", "qa", "imgs"]
     data = pd.read_excel(file_path).iloc[:, :5]

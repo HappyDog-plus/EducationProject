@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # Test model conversation
     # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Hello! how are you?", "image": ""}
+    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Describe this image.", "image": img_base64}
     # response = requests.post(url, json=data0)
     # print(response.json())
 
@@ -59,4 +59,9 @@ if __name__ == "__main__":
     #             "user_ans": "I don't know."
     #         }
     # response = requests.post(url, json=data1)
+    # print(response.json())
+
+    # Test generating course
+    # data = {"requirement": "What is venous drainage?"}
+    # response = requests.post(url, json=data)
     # print(response.json())

@@ -22,6 +22,11 @@ import logging
 import os
 import json
 import pandas as pd
+from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain import hub
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
 
 
 def current_time():
@@ -32,6 +37,7 @@ def current_time():
 # create audio folder and log folder
 current_file_path = Path(__file__).resolve()
 current_dir = current_file_path.parent
+data_dir = current_dir.parent / "local_data"
 audio_path = current_dir / "audio_saved"
 log_path = current_dir / "log"
 if not os.path.exists(audio_path):
@@ -64,10 +70,10 @@ class Model_Data(BaseModel):
 async def lifespan(app: FastAPI):
     logger.info("Model backend is starting up...")
     # initialize chatbot (local_model: 0, openai_api: 1)
-    app.state.model_type = 1
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    if app.state.model_type == 0:
-        model_path = r"/data/home/yangjiale/WorkSpace/EyeFM_Education/PretrainedModel/llava-v1.5-7b"
+    app.state.model_type = 0
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    if app.state.model_type == 1:
+        model_path = data_dir / "ModelWeights" /"llava-v1.5-7b"
         model_name="llava-v1.5-7b"
         # Lora(set base model and adapter weights) 
         # base_path = "/workspace/LLaVA/PretrainedModel/llava-v1.5-7b"
@@ -108,8 +114,8 @@ async def lifespan(app: FastAPI):
     app.state.chatbot = with_message_history
     app.state.config_history = config
     # Exercise data
-    ex_cat_path = current_dir.parent / "local_data" / "ExerciseCategories.xlsx"
-    ex_path = current_dir.parent / "local_data" / "Exercises.xlsx"
+    ex_cat_path = data_dir / "ExerciseCategories.xlsx"
+    ex_path = data_dir / "Exercises.xlsx"
     ex_cat_df = pd.read_excel(ex_cat_path, header=0)
     app.state.ex_keywords = ex_cat_df.iloc[:, 0].dropna().tolist()
     ex_df = pd.read_excel(ex_path)
@@ -221,9 +227,6 @@ async def model_inference(data: Model_Data):
         pass
 
     elif data.mode_code == 2:
-        # class_path = "classfication.xlsx"
-        # question_list_path = "result_1.xlsx"
-        # df = pd.read_excel(class_path, header=0)
         keywords = app.state.ex_keywords
         prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
                     \nBased on the given list of categories, match the following text to similar categories\
@@ -237,9 +240,10 @@ async def model_inference(data: Model_Data):
             response = response.content
         end = time.time()
         logger.info("Inference time: " + str(end - start))
-        classfication = json.loads(response)
-        keyword_list = classfication["keyword"]
-        # df = pd.read_excel(question_list_path)
+        classification = json.loads(response)
+        # Debug
+        print(classification)
+        keyword_list = classification["keyword"]
         question_list = app.state.ex_questions
         indices = [i + 1 for i, item in enumerate(question_list) if item in keyword_list]
         result_indices = indices[:10]
@@ -282,4 +286,50 @@ async def model_inference(data: Course_Invoke_Data):
             "res": datetime.now().second % 2
            }
 
+
+class Course_Gen_Data(BaseModel):
+    requirement: str
+
+
+@app.post("/course_generate")
+async def generate_data(data: Course_Gen_Data):
+    logger.info("Course Generate Start")
+    logger.info("requirement: " + data.requirement)
+    llm = ChatOpenAI(
+                            model="gpt-4o-2024-05-13",
+                            temperature=0.2,
+                            max_tokens=4096,
+                            timeout=None
+                        )
+    vectorstore_path = data_dir / "VectorStore" / "TextVectors"
+    embeddings = OpenAIEmbeddings()
+    vectorstore = FAISS.load_local(str(vectorstore_path), embeddings, allow_dangerous_deserialization=True)
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+    prompt = hub.pull("rlm/rag-prompt")
+
+    def format_docs(docs):
+        # Debug
+        # print(docs)
+        return "\n\n".join(doc.page_content for doc in docs)
+    
+    # Debug
+    # def print_prompt(prompt):
+    #     print("Intermediate prompt results", prompt)
+    #     return prompt
+    
+    rag_chain = (
+                    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+                    | prompt
+                    # Debug
+                    # | RunnableLambda(print_prompt)
+                    | llm
+                    | StrOutputParser()
+                )
+    
+    docs = retriever.invoke(data.requirement)
+    docs_list = [doc.page_content for doc in docs]
+    response = rag_chain.invoke(str(data.requirement))
+    logger.info("Course Generate End")
+    results = {"response": response, "documents": docs_list}
+    return results
     
