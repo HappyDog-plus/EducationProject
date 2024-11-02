@@ -31,8 +31,8 @@ ckpts*
 # DevContainer
 !.devcontainer/*
 
-# Demo
-serve_images/
+# Ignore local case reports data
+local_data/CaseReportImgs/
 
 # excel
 *.xlsx
