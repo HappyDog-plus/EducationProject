@@ -20,6 +20,8 @@ from langchain_openai import ChatOpenAI
 from pydub import AudioSegment
 import logging
 import os
+import json
+import pandas as pd
 
 
 def current_time():
@@ -201,7 +203,52 @@ async def model_inference(data: Model_Data):
     elif data.mode_code == 1:
         pass
     elif data.mode_code == 2:
-        pass
+        chatbot = app.state.chatbot
+        config = app.state.config_history
+
+        class_path = "classfication.xlsx"
+        question_list_path = "result_1.xlsx"
+        df = pd.read_excel(class_path, header=0)
+        keywords = df.iloc[:, 0].dropna().tolist()
+
+        prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
+                    \nBased on the given list of categories, match the following text to similar categories\
+                    \nCategories list: {', '.join(keywords)} \
+                    \nText: \"{data.input_text}\" \
+                    \nReturn format：{{\"keyword\": [matching categories list]}}"
+        # GPT and local model have different style prompt.
+        if app.state.model_type == 1:
+            message = HumanMessage(content = prompt)
+
+        logger.info("Model Inference Start")
+        logger.info(
+                    "\nuser_id: " + data.user_id +  
+                    "\ntime_span: " + data.time_span + 
+                    "\nmode_code: " + str(data.mode_code) + 
+                    "\ninput_text: " + data.input_text 
+                    )
+        start = time.time()
+        response = chatbot.invoke(message, config=config)
+        if app.state.model_type == 1:
+            response = response.content
+        end = time.time()
+        logger.info("Inference time: " + str(end - start))
+        logger.info("Model Inference End")
+
+        classfication = json.loads(response)
+        keyword_list = classfication["keyword"]
+
+        df = pd.read_excel(question_list_path)
+        question_list = df.iloc[:, 9].dropna().tolist()
+        indices = [i + 1 for i, item in enumerate(question_list) if item in keyword_list]
+        result_indices = indices[:10]
+        string_indices = [str(index) for index in result_indices]
+        # Extract response text from LLMResult object
+        # full_text = get_response_text(response)
+        return {"user_id": data.user_id, 
+                "time_span": str(datetime.now()), 
+                "mode_code": data.mode_code, 
+                "question_ids": string_indices}
     elif data.mode_code == 3:
         pass
     else:
