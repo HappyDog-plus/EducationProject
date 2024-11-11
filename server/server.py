@@ -2,7 +2,7 @@ from fastapi import FastAPI, File, UploadFile
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.chat_history import BaseChatMessageHistory, InMemoryChatMessageHistory
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from llava_custom import Custom_LLaVA
+from server.llava_custom import Custom_LLaVA
 from pydantic import BaseModel
 # import uvicorn
 import torch
@@ -12,10 +12,10 @@ from langchain_core.caches import InMemoryCache
 import time
 from datetime import datetime
 import shutil
-from xunfei import xunfei_recognize
+from server.xunfei import xunfei_recognize
 from pathlib import Path
 from contextlib import asynccontextmanager
-from config import set_environment
+from server.config import set_environment
 from langchain_openai import ChatOpenAI
 from pydub import AudioSegment
 import logging
@@ -27,7 +27,7 @@ from langchain_openai import OpenAIEmbeddings
 from langchain import hub
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
 from langchain_core.output_parsers import StrOutputParser
-
+from langchain_core.prompts import ChatPromptTemplate
 
 def current_time():
     t = datetime.now()
@@ -38,10 +38,10 @@ def current_time():
 current_file_path = Path(__file__).resolve()
 current_dir = current_file_path.parent
 data_dir = current_dir.parent / "local_data"
-audio_path = current_dir / "audio_saved"
+audio_save_path = current_dir / "audio_saved"
 log_path = current_dir / "log"
-if not os.path.exists(audio_path):
-    os.makedirs(audio_path)
+if not os.path.exists(audio_save_path):
+    os.makedirs(audio_save_path)
 if not os.path.exists(log_path):
     os.makedirs(log_path)
 
@@ -49,7 +49,7 @@ if not os.path.exists(log_path):
 # Create logger object
 logging.basicConfig(
                     level=logging.INFO,
-                    filename=Path("log") / (current_time() + ".log"),
+                    filename=log_path / (current_time() + ".log"),
                     filemode='a',
                     datefmt='%Y/%m/%d %H:%M:%S',
                     format='%(asctime)s - %(name)s - %(levelname)s - %(lineno)d - %(module)s - %(message)s',
@@ -113,6 +113,7 @@ async def lifespan(app: FastAPI):
     # initialize global resources
     app.state.chatbot = with_message_history
     app.state.config_history = config
+    app.state.llm = llm
     # Exercise data
     ex_cat_path = data_dir / "ExerciseCategories.xlsx"
     ex_path = data_dir / "Exercises.xlsx"
@@ -152,7 +153,7 @@ async def upload_audio(file: UploadFile = File(...)):
         return {"error": "File format not supported. Please upload a .wav or a .mp3 file."}
     logger.info("Audio Recognize Start")
     # save audio file
-    audio_path = Path("audio_saved") / file.filename
+    audio_path = audio_save_path / file.filename
     with open(audio_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     # convert .wav to .mp3
@@ -161,7 +162,7 @@ async def upload_audio(file: UploadFile = File(...)):
         audio = AudioSegment.from_wav(audio_path)
         # set sampling rate
         audio = audio.set_frame_rate(16000)
-        audio_path0 = Path("audio_saved") / (file.filename.split('.')[0] + ".mp3")
+        audio_path0 = audio_save_path / (file.filename.split('.')[0] + ".mp3")
         # export .mp3 audio file
         audio.export(audio_path0, format="mp3")
         # delete .wav file
@@ -189,11 +190,12 @@ async def model_inference(data: Model_Data):
                 )
     chatbot = app.state.chatbot
     config = app.state.config_history
+    llm = app.state.llm
 
     if data.mode_code == 0:
         prompt = ""
         # GPT and local model have different style prompt.
-        if app.state.model_type == 0:
+        if app.state.model_type == 1:
             if data.image != "":
                 prompt += ("<image>" + data.input_text + "<img>" + data.image + "</img>")
             else:
@@ -214,7 +216,7 @@ async def model_inference(data: Model_Data):
                 message = HumanMessage(content = data.input_text)
         start = time.time()
         response = chatbot.invoke(message, config=config)
-        if app.state.model_type == 1:
+        if app.state.model_type == 0:
             response = response.content
         end = time.time()
         logger.info("Inference time: " + str(end - start))
@@ -233,10 +235,10 @@ async def model_inference(data: Model_Data):
                     \nCategories list: {', '.join(keywords)} \
                     \nText: \"{data.input_text}\" \
                     \nReturn format：{{\"keyword\": [matching categories list]}}"
-        message = HumanMessage(content = prompt)
+        # message = HumanMessage(content = prompt)
         start = time.time()
-        response = chatbot.invoke(message, config=config)
-        if app.state.model_type == 1:
+        response = llm.invoke(prompt)
+        if app.state.model_type == 0:
             response = response.content
         end = time.time()
         logger.info("Inference time: " + str(end - start))
@@ -288,48 +290,79 @@ async def model_inference(data: Course_Invoke_Data):
 
 
 class Course_Gen_Data(BaseModel):
-    requirement: str
+    template: str
+    question: str
 
 
 @app.post("/course_generate")
 async def generate_data(data: Course_Gen_Data):
+    # OMP error
+    import os
+    os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
     logger.info("Course Generate Start")
-    logger.info("requirement: " + data.requirement)
-    llm = ChatOpenAI(
-                            model="gpt-4o-2024-05-13",
-                            temperature=0.2,
-                            max_tokens=4096,
-                            timeout=None
-                        )
-    vectorstore_path = data_dir / "VectorStore" / "TextVectors"
+    logger.info("question: " + data.question)
+    llm0 = ChatOpenAI(
+        model="gpt-4o-2024-05-13",
+        temperature=0.2,
+        max_tokens=4096,
+        timeout=None
+    )
+    vectorstore_path = data_dir / "VectorStore" / "LectureContentVecs"
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.load_local(str(vectorstore_path), embeddings, allow_dangerous_deserialization=True)
     retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 10})
-    prompt = hub.pull("rlm/rag-prompt")
+    # prompt_template = """
+    #                     Generate a lecture script based on the following context:
+
+    #                     Context:
+    #                     {context}
+
+    #                     Question:
+    #                     {question}
+
+    #                     Please use clear and professional language, ensuring that the script is logically coherent, accurate, and suitable for student learning. Include an introduction, main content, and a conclusion.
+    #                   """
+    prompt_template = data.template
+    prompt = ChatPromptTemplate.from_messages([("user", prompt_template)])
 
     def format_docs(docs):
         # Debug
         # print(docs)
         return "\n\n".join(doc.page_content for doc in docs)
-    
+
     # Debug
     # def print_prompt(prompt):
     #     print("Intermediate prompt results", prompt)
     #     return prompt
-    
+
     rag_chain = (
-                    {"context": retriever | format_docs, "question": RunnablePassthrough()}
-                    | prompt
-                    # Debug
-                    # | RunnableLambda(print_prompt)
-                    | llm
-                    | StrOutputParser()
-                )
-    
-    docs = retriever.invoke(data.requirement)
+            {"context": retriever | format_docs, "question": RunnablePassthrough()}
+            | prompt
+            # Debug
+            # | RunnableLambda(print_prompt)
+            | llm0
+            | StrOutputParser()
+    )
+
+    docs = retriever.invoke(data.question)
     docs_list = [doc.page_content for doc in docs]
-    response = rag_chain.invoke(str(data.requirement))
+    response = rag_chain.invoke(str(data.question))
     logger.info("Course Generate End")
     results = {"response": response, "documents": docs_list}
     return results
-    
+
+
+class summary_request_data(BaseModel):
+    user_id: str
+    course_id: str
+    time_span: str
+
+
+@app.post("/summary")
+async def summary(data: summary_request_data):
+    logger.info("Summary Start")
+    # generate summary
+    summary = "This is a summary."
+    logger.info("Summary End")
+    results = {"user_id": data.user_id, "time_span": str(datetime.now()), "summary": summary}
+    return results

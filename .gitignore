@@ -36,3 +36,6 @@ local_data/CaseReportImgs/
 local_data/VectorStore/
 local_data/*.xlsx
 local_data/ModelWeights
+
+# Pycharm run configuration
+.run/
