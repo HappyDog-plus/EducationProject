@@ -36,3 +36,13 @@ local_data/CaseReportImgs/
 local_data/VectorStore/
 local_data/*.xlsx
 local_data/ModelWeights
+
+client/audio
+client/image
+
+# Pycharm run configuration
+.run/
+
+# Temporary folders and files
+server/log
+server/audio_saved
