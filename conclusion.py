@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 # import uvicorn
 import torch
+import openai
 
 # from langchain.schema import LLMResult
 from langchain_core.globals import set_llm_cache
@@ -402,14 +403,57 @@ class summary_request_data(BaseModel):
     user_id: str
     course_id: str
     time_span: str
+
+
 # 获取笔记内容
 url_note = "http://120.26.66.32:18080/api/v1/getNotes"
+
+
+# 笔记总结
+def notes_conclude(note):
+    prompt = f"According to the notebook '{note}' provided by me, the content behind the uword necrosis keyword are my class notes from the ophthalmology course. Please help me organize the knowledge points in outline form and output it, no need to output other words"
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return response.choices[0].message["content"].strip()
+
+
 # 查询案例分析
 url_anli = "http://120.26.66.32:18080/api/v1/getExampleAnalysis"
 # 查询用户已答题目
 url_excercise = "http://120.26.66.32:18080/api/v1/getExercise"
+
+
+# 题目总结
+def excercise_conclude(description):
+    prompt = f"According to the conclusion '{description}' provided by me, if the parameters of answer and user_ans are inconsistent, concise summary of their topic knowledge and explanation and then output, no need to ouput correct answer and user answer and other words"
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return response.choices[0].message["content"].strip()
+
+
 # 查询问答记录
 url_QA = "http://120.26.66.32:18080/api/v1/getChatHistory"
+
+
+# 问答总结
+def chat_conclude(conversations):
+    prompt = f"According to the conversations '{conversations}' provided by me, the part of text are the questions I raised in the ophthalmology class and the answers given by the teacher. Please help me summarize the questions and key words for future reference, the word number is between 100-200 words,no need to output other words"
+
+    response = openai.ChatCompletion.create(
+        model="gpt-4o-mini",  # 使用GPT-4.0 Mini模型
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    return response.choices[0].message["content"].strip()
+
+
 @app.post("/summary")
 async def summary(data: summary_request_data):
     logger.info("Summary Start")
