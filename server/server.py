@@ -113,6 +113,7 @@ async def lifespan(app: FastAPI):
     # initialize global resources
     app.state.chatbot = with_message_history
     app.state.config_history = config
+    app.state.llm = llm
     # Exercise data
     ex_cat_path = data_dir / "ExerciseCategories.xlsx"
     ex_path = data_dir / "Exercises.xlsx"
@@ -267,24 +268,79 @@ class Course_Invoke_Data(BaseModel):
     question: str
     correct_ans: str
     user_ans: str 
+ 
 
+# Function to invoke OpenAI and get a semantic comparison  
+def evaluate_ans(question, correct_ans, user_ans):
+    prompt = f'''
+    Question: 
+    {question}
+    Correct Answer: 
+    {correct_ans}
+    Student Answer: 
+    {user_ans}
+    Task: Based on the correct answer provided, determine if the student answer is correct. If the student answer is correct, return 1; otherwise, return 0. Only provide the number 0 or 1 as the output.
+    '''
+    response = app.state.llm.invoke(prompt)
+    if app.state.model_type == 1:
+        response = response.content
+    return response
+  
+  
+# Function to invoke OpenAI and get an explanation  
+def get_explanation(question, correct_ans, user_ans):
+    prompt = f'''
+    Question: 
+    {question}
 
-@app.post("/course_invoke")
-async def model_inference(data: Course_Invoke_Data):
-    logger.info("Course Excercise Judgement Start")
+    Correct answer: 
+    {correct_ans}
+
+    Student wrong answer: 
+    {user_ans}
+
+    Task: Evaluate the student answer based on the question and correct answer provided. Offer feedback that is objective, concise, logically clear.
+    '''
+    response = app.state.llm.invoke(prompt)
+    if app.state.model_type == 1:
+        response = response.content
+    return response
+
+  
+@app.post("/course_invoke")   
+async def course_inference(data: Course_Invoke_Data):
+    logger.info("Course Exercise Judgement Start")   
     logger.info(    
-                    "\nuser_id: " + data.user_id + 
-                    "\ntime_span: " + data.time_span + 
-                    "\nquestion: " + data.question + 
-                    "\ncorrect_ans: " + data.correct_ans + 
-                    "\nuser_ans: " + data.user_ans
+                "\nuser_id: " + data.user_id + 
+                "\ntime_span: " + data.time_span + 
+                "\nquestion: " + data.question + 
+                "\ncorrect_ans: " + data.correct_ans + 
+                "\nuser_ans: " + data.user_ans
                 )
-    logger.info("Course Excercise Judgement End")
-    return {
-            "user_id": data.user_id,
-            "time_span": str(datetime.now()),
-            "res": datetime.now().second % 2
-           }
+    res = int(evaluate_ans(data.question, data.correct_ans, data.user_ans))
+    if not res:
+        # Generate explanation if semantically incorrect
+        explanation = get_explanation(data.question, data.correct_ans, data.user_ans)
+    else:
+        encouragements = [
+            "Well done! Your answer is spot-on!",
+            "Great job! Keep up the excellent work!",
+            "You have a clear understanding and explained it perfectly!",
+            "Fantastic! Your hard work is paying off!",
+            "Exactly right! You're a smart cookie!",
+            "Excellent answer! Keep going strong!",
+            "Absolutely correct! You’ve truly mastered this!",
+            "Outstanding work! Believe in yourself, you're amazing!"
+        ]
+        explanation = encouragements[datetime.now().second % 8]
+    result = {
+                "user_id": data.user_id,
+                "time_span": str(datetime.now()),
+                "res": res,
+                "explanation": explanation
+             }
+    logger.info("Course Exercise Judgement End")   
+    return result
 
 
 class Course_Gen_Data(BaseModel):
@@ -332,4 +388,3 @@ async def generate_data(data: Course_Gen_Data):
     logger.info("Course Generate End")
     results = {"response": response, "documents": docs_list}
     return results
-    
