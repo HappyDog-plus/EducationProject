@@ -463,16 +463,23 @@ async def summary(data: summary_request_data):
     }
     response_note = requests.get(url_note, params=params)
     note = response_note.json()
+    note = notes_conclude(note)
+
     response_ti = requests.get(url_excercise, params=params)
     question = response_ti.json()
+    question = excercise_conclude(question)
+
     response_qa = requests.get(url_QA, params=params)
     qa = response_qa.json()
+    qa = chat_conclude(qa)
+    summary = {}
+    summary["Q&A summary"] = qa
+    summary["Error summary"] = question
+    summary["Note summary"] = note
     logger.info("Summary End")
     results = {
         "user_id": data.user_id,
         "time_span": str(datetime.now()),
-        "Q&A summary": qa,
-        "Error summary": question,
-        "Note summary": note,
+        "summary": summary,
     }
     return results
