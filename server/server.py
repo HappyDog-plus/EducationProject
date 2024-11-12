@@ -82,8 +82,8 @@ async def lifespan(app: FastAPI):
     else:
         set_environment()
         llm = ChatOpenAI(
-                            model="gpt-4o-mini",
-                            temperature=0,
+                            model="gpt-4o-mini-2024-07-18",
+                            temperature=0.2,
                             max_tokens=None,
                             timeout=None,
                             max_retries=2
@@ -109,6 +109,7 @@ async def lifespan(app: FastAPI):
     # initialize global resources
     app.state.chatbot = with_message_history
     app.state.config_history = config
+    app.state.llm = llm
     yield 
     print("-"*50, "\nModel backend is closing ...\n", "-"*50)
     logger.info("Model backend is closing ...")
@@ -217,24 +218,42 @@ class Course_Invoke_Data(BaseModel):
  
 
 # Function to invoke OpenAI and get a semantic comparison  
-async def is_semantically_correct(user_ans: str, correct_ans: str, app: FastAPI) -> bool:  
-    prompt = (  
-        f"Are the following two answers semantically the same?\n"  
-        f"Correct Answer: {correct_ans}\n"  
-        f"User Answer: {user_ans}"  
-    )  
-    config = {"configurable": {"session_id": "idx1"}}  
-    response = await app.state.chatbot.invoke([HumanMessage(content=prompt)], config=config)    
-    return response.content.lower() == "true"  
+def evaluate_ans(question, correct_ans, user_ans):
+    prompt = f'''
+    Question: 
+    {question}
+    Correct Answer: 
+    {correct_ans}
+    Student Answer: 
+    {user_ans}
+    Task: Based on the correct answer provided, determine if the student answer is correct. If the student answer is correct, return 1; otherwise, return 0. Only provide the number 0 or 1 as the output.
+    '''
+    response = app.state.llm.invoke(prompt)
+    if app.state.model_type == 1:
+        response = response.content
+    return response
   
 # Function to invoke OpenAI and get an explanation  
-async def get_explanation(prompt: str, app: FastAPI) -> str:  
-    config = {"configurable": {"session_id": "idx1"}}  
-    response = await app.state.chatbot.invoke([HumanMessage(content=prompt)], config=config)  
-    return response.content
+def get_explanation(question, correct_ans, user_ans):
+    prompt = f'''
+    Question: 
+    {question}
+
+    Correct answer: 
+    {correct_ans}
+
+    Student wrong answer: 
+    {user_ans}
+
+    Task: Evaluate the student answer based on the question and correct answer provided. Offer feedback that is objective, concise, logically clear.
+    '''
+    response = app.state.llm.invoke(prompt)
+    if app.state.model_type == 1:
+        response = response.content
+    return response
 
 @app.post("/course_invoke")   
-async def course_inference(data: Course_Invoke_Data):   
+async def course_inference(data: Course_Invoke_Data):
     logger.info("Course Exercise Judgement Start")   
     logger.info(    
                 "\nuser_id: " + data.user_id + 
@@ -242,34 +261,30 @@ async def course_inference(data: Course_Invoke_Data):
                 "\nquestion: " + data.question + 
                 "\ncorrect_ans: " + data.correct_ans + 
                 "\nuser_ans: " + data.user_ans
-                )   
-  
-    # Use OpenAI to compare user_ans and correct_ans semantically  
-    is_semantically_correct_result = await is_semantically_correct(data.user_ans, data.correct_ans)    
-      
-    if not is_semantically_correct_result:  
-        # Generate explanation if semantically incorrect  
-        prompt = (  
-            f"Compare the following answers and provide an explanation why they are not semantically the same:\n"  
-            f"Correct Answer: {data.correct_ans}\n"  
-            f"User Answer: {data.user_ans}"  
-        )  
-        explanation = await get_explanation(prompt)  
-          
-        result = {  
-            "user_id": data.user_id,  
-            "time_span": str(datetime.now()),  
-            "res": 0,  
-            "explanation": explanation  
-        }  
-    else:  
-        result = {  
-            "user_id": data.user_id,  
-            "time_span": str(datetime.now()),  
-            "res": 1,  
-            "explanation": "Your answer is semantically correct!"  
-        }  
-      
+                )
+    res = evaluate_ans(data.question, data.correct_ans, data.user_ans)
+    print(res)
+    if not int(res):
+        # Generate explanation if semantically incorrect
+        explanation = get_explanation(data.question, data.correct_ans, data.user_ans)
+    else:
+        encouragements = [
+            "Well done! Your answer is spot-on!",
+            "Great job! Keep up the excellent work!",
+            "You have a clear understanding and explained it perfectly!",
+            "Fantastic! Your hard work is paying off!",
+            "Exactly right! You're a smart cookie!",
+            "Excellent answer! Keep going strong!",
+            "Absolutely correct! You’ve truly mastered this!",
+            "Outstanding work! Believe in yourself, you're amazing!"
+        ]
+        explanation = encouragements[datetime.now().second % 8]
+    result = {
+                "user_id": data.user_id,
+                "time_span": str(datetime.now()),
+                "res": res,
+                "explanation": explanation
+             }
     logger.info("Course Exercise Judgement End")   
     return result   
 

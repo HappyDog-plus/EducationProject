@@ -27,7 +27,7 @@ if __name__ == "__main__":
     
 
     # url = "https://4okpi1941999.vicp.fun/course_invoke"
-    url = "http://127.0.0.1:8000/recognize"
+    # url = "http://127.0.0.1:8000/recognize"
 
     # # Test model
     # img_path = Path("image") / "test_img.jpg"
@@ -38,10 +38,10 @@ if __name__ == "__main__":
 
 
     # Test XunFei Recognize API
-    file_path = Path("audio") / "test_wav.wav"
-    with open(file_path, 'rb') as f:
-        response = requests.post(url, files={"file": f})
-    print(response.json())
+    # file_path = Path("audio") / "test_wav.wav"
+    # with open(file_path, 'rb') as f:
+    #     response = requests.post(url, files={"file": f})
+    # print(response.json())
 
 
     # Test in-class exercise judge model.
@@ -54,3 +54,15 @@ if __name__ == "__main__":
     #         }
     # response = requests.post(url, json=data1)
     # print(response.json())
+
+    # Test 7: Course video window QA
+    url = " http://127.0.0.1:8000/course_invoke"
+    data = {
+                "user_id": "123",
+                "time_span": "2024-09-20 16:43:20.0000",
+                "question": "What’s the answer of 1 + 1?",
+                "correct_ans": "The answer is 2.",
+                "user_ans": "Maybe the answer is 2, I guess."
+           }
+    response = requests.post(url, json=data)
+    print(response.json())
