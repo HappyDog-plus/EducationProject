@@ -183,13 +183,13 @@ def image_to_base64(image: Image.Image) -> str:
 
 
 def test():
-    # image_path = r"E:\SJTU_Medical\LLaVA\serve_images\2024-08-19\5a603cbcf864db01aa2d5841e01ed4f2.jpg"
+    # image_path = r""
     # image = Image.open(image_path)
     # image_base64 = image_to_base64(image)
     # images = [image_base64]
 
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model_path = "E:\\SJTU_Medical\\LLaVA\\pretrained_model\\llava-v1.5-7b"
+    # model_path = ""
     # model_name="llava-v1.5-7b"
     # llm = Custom_LLaVA(model_path=model_path, model_base=None, model_name=model_name, load_4bit=False, load_8bit=True, device=device)
     

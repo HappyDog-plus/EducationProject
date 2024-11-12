@@ -12,7 +12,7 @@ from pathlib import Path
 
 
 if __name__ == "__main__":
-    docs_path = r"G:\Research\EyeFM_Education_Data\Data\Test"
+    docs_path = r""
     current_file_path = Path(__file__).resolve()
     current_dir = current_file_path.parent
     vectorstore_path = current_dir / "vectors"

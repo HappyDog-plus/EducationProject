@@ -7,11 +7,11 @@ from langchain_community.vectorstores import FAISS
 import chardet
 
 if __name__ == "__main__":
-    vectorstore_path = Path("G:\Research\EyeFM_Education_Data\VectorStore\FAISS")
+    vectorstore_path = Path("")
     vectorstore_path.mkdir(exist_ok=True)
 
     # convert docs to vectors, and persists vectorstore
-    # docs_path = r"G:\Research\EyeFM_Education_Data\Data\TextBook"
+    # docs_path = r""
     # doc_names = os.listdir(docs_path)
     # loaders = []
     # for doc_name in doc_names:

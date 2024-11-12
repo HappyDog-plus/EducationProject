@@ -27,14 +27,20 @@ if __name__ == "__main__":
     
 
     # url = "https://4okpi1941999.vicp.fun/course_invoke"
-    # url = "http://127.0.0.1:8000/recognize"
+#     url = "http://127.0.0.1:8001/model"
 
     # # Test model
+    # Test model conversation
     # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Hello! how are you?", "image": ""}
+    # data0 = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "Describe this image.", "image": img_base64}
     # response = requests.post(url, json=data0)
     # print(response.json())
+
+    # Test searching exercises based on student input.
+#     data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some exercise about Glaucoma", "image": ""}
+#     response = requests.post(url, json=data)
+#     print(response.json())
 
 
     # Test XunFei Recognize API
@@ -54,6 +60,7 @@ if __name__ == "__main__":
     #         }
     # response = requests.post(url, json=data1)
     # print(response.json())
+
 
     # Test 7: Course video window QA
     url = " http://127.0.0.1:8000/course_invoke"
