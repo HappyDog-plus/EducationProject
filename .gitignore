@@ -31,6 +31,8 @@ ckpts*
 # DevContainer
 !.devcontainer/*
 
-# Demo
-serve_images/
-
+# Local data
+local_data/CaseReportImgs/
+local_data/VectorStore/
+local_data/*.xlsx
+local_data/ModelWeights

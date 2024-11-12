@@ -20,11 +20,31 @@ from langchain_openai import ChatOpenAI
 from pydub import AudioSegment
 import logging
 import os
+import json
+import pandas as pd
+from langchain_community.vectorstores import FAISS
+from langchain_openai import OpenAIEmbeddings
+from langchain import hub
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
 
 
 def current_time():
     t = datetime.now()
     return str(t.year)+"_"+str(t.month)+"_"+str(t.day)+"_"+str(t.hour)+"_"+str(t.minute)
+
+
+# create audio folder and log folder
+current_file_path = Path(__file__).resolve()
+current_dir = current_file_path.parent
+data_dir = current_dir.parent / "local_data"
+audio_path = current_dir / "audio_saved"
+log_path = current_dir / "log"
+if not os.path.exists(audio_path):
+    os.makedirs(audio_path)
+if not os.path.exists(log_path):
+    os.makedirs(log_path)
+
 
 # Create logger object
 logging.basicConfig(
@@ -36,17 +56,6 @@ logging.basicConfig(
                     encoding='utf-8'
                     )
 logger = logging.getLogger(__name__)
-
-def delete_file(file_path):
-    try:
-        file = Path(file_path)
-        if file.is_file(): 
-            file.unlink()
-            logger.info(f"File {file_path} is deleted successfully.")
-        else:
-            logger.warning(f"File {file_path} does not exist.")
-    except Exception as e:
-        logger.error(f"File deleting error: {e}")
 
 
 class Model_Data(BaseModel):
@@ -60,16 +69,11 @@ class Model_Data(BaseModel):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Model backend is starting up...")
-    # create audio folder and log folder
-    if not os.path.exists("audio_saved"):
-        os.makedirs("audio_saved")
-    if not os.path.exists("log"):
-        os.makedirs("log")
     # initialize chatbot (local_model: 0, openai_api: 1)
-    app.state.model_type = 1
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
-    if app.state.model_type == 0:
-        model_path = r"/data/home/yangjiale/WorkSpace/EyeFM_Education/PretrainedModel/llava-v1.5-7b"
+    app.state.model_type = 0
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    if app.state.model_type == 1:
+        model_path = data_dir / "ModelWeights" /"llava-v1.5-7b"
         model_name="llava-v1.5-7b"
         # Lora(set base model and adapter weights) 
         # base_path = "/workspace/LLaVA/PretrainedModel/llava-v1.5-7b"
@@ -82,8 +86,8 @@ async def lifespan(app: FastAPI):
     else:
         set_environment()
         llm = ChatOpenAI(
-                            model="gpt-4o-mini-2024-07-18",
-                            temperature=0.2,
+                            model="gpt-4o-mini",
+                            temperature=0,
                             max_tokens=None,
                             timeout=None,
                             max_retries=2
@@ -110,7 +114,16 @@ async def lifespan(app: FastAPI):
     app.state.chatbot = with_message_history
     app.state.config_history = config
     app.state.llm = llm
-    yield 
+    # Exercise data
+    ex_cat_path = data_dir / "ExerciseCategories.xlsx"
+    ex_path = data_dir / "Exercises.xlsx"
+    ex_cat_df = pd.read_excel(ex_cat_path, header=0)
+    app.state.ex_keywords = ex_cat_df.iloc[:, 0].dropna().tolist()
+    ex_df = pd.read_excel(ex_path)
+    app.state.ex_questions = ex_df.iloc[:, 9].dropna().tolist()
+
+    yield
+
     print("-"*50, "\nModel backend is closing ...\n", "-"*50)
     logger.info("Model backend is closing ...")
     del llm
@@ -119,6 +132,18 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+def delete_file(file_path):
+    try:
+        file = Path(file_path)
+        if file.is_file(): 
+            file.unlink()
+            logger.info(f"File {file_path} is deleted successfully.")
+        else:
+            logger.warning(f"File {file_path} does not exist.")
+    except Exception as e:
+        logger.error(f"File deleting error: {e}")
 
 
 # convert .wav audio to texts
@@ -154,9 +179,19 @@ async def upload_audio(file: UploadFile = File(...)):
 
 @app.post("/model")
 async def model_inference(data: Model_Data):
+
+    logger.info("Model Inference Start")
+    logger.info(
+                "\nuser_id: " + data.user_id +  
+                "\ntime_span: " + data.time_span + 
+                "\nmode_code: " + str(data.mode_code) + 
+                "\ninput_text: " + data.input_text + 
+                "\nimage: " + data.image[-100:]
+                )
+    chatbot = app.state.chatbot
+    config = app.state.config_history
+
     if data.mode_code == 0:
-        chatbot = app.state.chatbot
-        config = app.state.config_history
         prompt = ""
         # GPT and local model have different style prompt.
         if app.state.model_type == 0:
@@ -178,35 +213,53 @@ async def model_inference(data: Model_Data):
                                     )
             else:
                 message = HumanMessage(content = data.input_text)
-        logger.info("Model Inference Start")
-        logger.info(
-                    "\nuser_id: " + data.user_id +  
-                    "\ntime_span: " + data.time_span + 
-                    "\nmode_code: " + str(data.mode_code) + 
-                    "\ninput_text: " + data.input_text + 
-                    "\nimage: " + data.image[-100:]
-                    )
         start = time.time()
         response = chatbot.invoke(message, config=config)
         if app.state.model_type == 1:
             response = response.content
         end = time.time()
         logger.info("Inference time: " + str(end - start))
-        logger.info("Model Inference End")
-        # Extract response text from LLMResult object
-        # full_text = get_response_text(response)
         return {"user_id": data.user_id, 
                 "time_span": str(datetime.now()), 
                 "mode_code": data.mode_code, 
                 "output_text": response}
+    
     elif data.mode_code == 1:
         pass
+
     elif data.mode_code == 2:
-        pass
+        keywords = app.state.ex_keywords
+        prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
+                    \nBased on the given list of categories, match the following text to similar categories\
+                    \nCategories list: {', '.join(keywords)} \
+                    \nText: \"{data.input_text}\" \
+                    \nReturn format：{{\"keyword\": [matching categories list]}}"
+        message = HumanMessage(content = prompt)
+        start = time.time()
+        response = chatbot.invoke(message, config=config)
+        if app.state.model_type == 1:
+            response = response.content
+        end = time.time()
+        logger.info("Inference time: " + str(end - start))
+        classification = json.loads(response)
+        # Debug
+        print(classification)
+        keyword_list = classification["keyword"]
+        question_list = app.state.ex_questions
+        indices = [i + 1 for i, item in enumerate(question_list) if item in keyword_list]
+        result_indices = indices[:10]
+        string_indices = [str(index) for index in result_indices]
+        return {"user_id": data.user_id, 
+                "time_span": str(datetime.now()), 
+                "mode_code": data.mode_code, 
+                "question_ids": string_indices}
+    
     elif data.mode_code == 3:
         pass
+
     else:
         pass
+    logger.info("Model Inference End")
 
 
 class Course_Invoke_Data(BaseModel):
@@ -233,6 +286,7 @@ def evaluate_ans(question, correct_ans, user_ans):
         response = response.content
     return response
   
+  
 # Function to invoke OpenAI and get an explanation  
 def get_explanation(question, correct_ans, user_ans):
     prompt = f'''
@@ -252,6 +306,7 @@ def get_explanation(question, correct_ans, user_ans):
         response = response.content
     return response
 
+  
 @app.post("/course_invoke")   
 async def course_inference(data: Course_Invoke_Data):
     logger.info("Course Exercise Judgement Start")   
@@ -262,9 +317,8 @@ async def course_inference(data: Course_Invoke_Data):
                 "\ncorrect_ans: " + data.correct_ans + 
                 "\nuser_ans: " + data.user_ans
                 )
-    res = evaluate_ans(data.question, data.correct_ans, data.user_ans)
-    print(res)
-    if not int(res):
+    res = int(evaluate_ans(data.question, data.correct_ans, data.user_ans))
+    if not res:
         # Generate explanation if semantically incorrect
         explanation = get_explanation(data.question, data.correct_ans, data.user_ans)
     else:
@@ -286,41 +340,51 @@ async def course_inference(data: Course_Invoke_Data):
                 "explanation": explanation
              }
     logger.info("Course Exercise Judgement End")   
-    return result   
-
-# def get_response_text(response: LLMResult) -> str:
-#     full_text = ""
-#     for generation in response.generations:
-#         for gen in generation:
-#             full_text += gen.text
-#     return full_text
+    return result
 
 
+class Course_Gen_Data(BaseModel):
+    requirement: str
 
-if __name__ == "__main__":
-    # # initialize chatbot
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model_path = r"G:\Research\ModelWeights\llava-v1.5-7b"
-    # model_name="llava-v1.5-7b"
-    # # base_path = "/workspace/LLaVA/PretrainedModel/llava-v1.5-7b"
-    # llm = Custom_LLaVA(model_path=model_path, model_base=None, model_name=model_name, load_4bit=False, load_8bit=True, device=device)
+
+@app.post("/course_generate")
+async def generate_data(data: Course_Gen_Data):
+    logger.info("Course Generate Start")
+    logger.info("requirement: " + data.requirement)
+    llm = ChatOpenAI(
+                            model="gpt-4o-2024-05-13",
+                            temperature=0.2,
+                            max_tokens=4096,
+                            timeout=None
+                        )
+    vectorstore_path = data_dir / "VectorStore" / "TextVectors"
+    embeddings = OpenAIEmbeddings()
+    vectorstore = FAISS.load_local(str(vectorstore_path), embeddings, allow_dangerous_deserialization=True)
+    retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+    prompt = hub.pull("rlm/rag-prompt")
+
+    def format_docs(docs):
+        # Debug
+        # print(docs)
+        return "\n\n".join(doc.page_content for doc in docs)
     
-    # # caching layer for chat models (reducing the number of API calls)
-    # set_llm_cache(InMemoryCache())
+    # Debug
+    # def print_prompt(prompt):
+    #     print("Intermediate prompt results", prompt)
+    #     return prompt
     
-    # # record history chat
-    # store = {}
-    # with_message_history = RunnableWithMessageHistory(llm, get_session_history)
-    # config = {"configurable": {"session_id": "idx1"}}
-    # response = with_message_history.invoke([
-    #                                          SystemMessage(content="A chat between a curious Human and an AI. The AI assistant gives helpful, detailed, and polite answers to the Human's questions."), 
-    #                                          AIMessage(content="Hello! How can I help you today?"),
-    #                                          HumanMessage(content="Hi! Nice to meet you.")
-    #                                        ], 
-    #                                         config=config)
-
-
-
-    # uvicorn.run(app, host="0.0.0.0", port=8000)
-    pass
+    rag_chain = (
+                    {"context": retriever | format_docs, "question": RunnablePassthrough()}
+                    | prompt
+                    # Debug
+                    # | RunnableLambda(print_prompt)
+                    | llm
+                    | StrOutputParser()
+                )
     
+    docs = retriever.invoke(data.requirement)
+    docs_list = [doc.page_content for doc in docs]
+    response = rag_chain.invoke(str(data.requirement))
+    logger.info("Course Generate End")
+    results = {"response": response, "documents": docs_list}
+    return results
