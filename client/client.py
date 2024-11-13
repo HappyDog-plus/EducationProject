@@ -28,6 +28,7 @@ if __name__ == "__main__":
     # url = "https://4okpi1941999.vicp.fun"
     url_root = "http://127.0.0.1:8000"
 
+
     # Test: model
     # url = url_root + "/model"
     # Test 1: model conversation
@@ -63,6 +64,11 @@ if __name__ == "__main__":
     # }
     # response = requests.post(url, json=data)
     # print(response.json())
+
+    # Test searching exercises based on student input.
+    data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some exercise about Glaucoma", "image": ""}
+    response = requests.post(url, json=data)
+    print(response.json())
 
 
     # Test 5: generating course

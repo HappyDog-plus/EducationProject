@@ -226,34 +226,58 @@ async def model_inference(data: Model_Data):
                 "output_text": response}
     
     elif data.mode_code == 1:
-        pass
+        user_id = data.user_id  
+        course_ids = ["26", "27", "38", "42"]
+        question_ids = []
+        url_excercise = "http://120.26.66.32:18080/api/v1/getExercise"
+        for course_id in course_ids:
+            param = {
+                "user_id": user_id,
+                "course_id": course_id
+            }
+            response = requests.get(url_excercise, params=param)
+            if response.status_code == 200:
+                try:
+                    response_data = response.json()
+                    for item in response_data:
+                        if 'question_id' in item:
+                            question_ids.append(item['question_id'])
+                        else:
+                            logger.info(f"Item in response does not contain 'question_id'.")
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse JSON for course_id {course_id}.")
+            else:
+                logger.error(f"Request for course_id {course_id} failed. Status code: {response.status_code}")
 
-    elif data.mode_code == 2:
+            question_history = sorted(set(question_ids))
+
         keywords = app.state.ex_keywords
         prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
                     \nBased on the given list of categories, match the following text to similar categories\
                     \nCategories list: {', '.join(keywords)} \
                     \nText: \"{data.input_text}\" \
                     \nReturn format：{{\"keyword\": [matching categories list]}}"
-        # message = HumanMessage(content = prompt)
+        message = HumanMessage(content = prompt)
         start = time.time()
-        response = llm.invoke(prompt)
-        if app.state.model_type == 0:
+        response = llm.invoke(message, config=config)
+        if app.state.model_type == 1:
             response = response.content
         end = time.time()
         logger.info("Inference time: " + str(end - start))
-        classification = json.loads(response)
-        # Debug
-        print(classification)
-        keyword_list = classification["keyword"]
+        classfication = json.loads(response)
+        keyword_list = classfication["keyword"]
         question_list = app.state.ex_questions
         indices = [i + 1 for i, item in enumerate(question_list) if item in keyword_list]
-        result_indices = indices[:10]
-        string_indices = [str(index) for index in result_indices]
+        filtered_indices = set(indices) - set(question_history)
+        string_indices = [str(index) for index in filtered_indices]
+        result_indices = string_indices[:10]
         return {"user_id": data.user_id, 
                 "time_span": str(datetime.now()), 
                 "mode_code": data.mode_code, 
-                "question_ids": string_indices}
+                "question_ids": result_indices}
+
+    elif data.mode_code == 2:
+        pass
     
     elif data.mode_code == 3:
         pass
