@@ -30,18 +30,38 @@ if __name__ == "__main__":
 
 
     # Test: model
-    # url = url_root + "/model"
+    url = url_root + "/model"
     # Test 1: model conversation
     # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "How are you?", "image": ""}
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "The weather is so bad.", "image": ""}
+
+    # Test 2: searching exercises based on student input.
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(1), "input_text": "I want to do some exercises about Glaucoma", "image": ""}
+
+    # Test 3: case report request
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some case report exercise about Presbyopia", "image": ""}
+
+    # Test 4: case report patient
+    # context = "A 50-year-old man with low myopia is noticing more difficulty reading with his distance glasses. He usually takes his glasses off to read but says this is becoming a hassle, and therefore he wants a new pair of glasses."
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(3), "input_text": f"<s>What's your gender?</s><c>{context}</c>", "image": ""}
+
+    # Test 5: case report doctor
+    # input_text = f'''
+    #              <q>What is the problem?</q>
+    #              <c>{context}</c>
+    #              '''
+
+    # input_text = f'''
+    #                  <q>What is the problem?</q>
+    #                  <c>{context}</c>
+    #                  <s>I don't know the answer.</s>
+    #                  <d>Presbyopia</d>
+    #              '''
+    # data = {"user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(4), "input_text": input_text, "image": ""}
     # response = requests.post(url, json=data)
     # print(response.json())
 
-    # Test 2: searching exercises based on student input.
-    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some exercise about Glaucoma", "image": ""}
-    # response = requests.post(url, json=data)
-    # print(response.json())
 
 
     # Test 3: XunFei Recognize API
@@ -64,11 +84,6 @@ if __name__ == "__main__":
     # }
     # response = requests.post(url, json=data)
     # print(response.json())
-
-    # Test searching exercises based on student input.
-    data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some exercise about Glaucoma", "image": ""}
-    response = requests.post(url, json=data)
-    print(response.json())
 
 
     # Test 5: generating course
@@ -106,5 +121,6 @@ if __name__ == "__main__":
     #         }
     # response = requests.post(url, json=data)
     # print(response.json())
+
 
     pass

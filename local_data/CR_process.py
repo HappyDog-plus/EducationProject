@@ -59,31 +59,78 @@ def main():
     file_path = r"CaseReports.xlsx"
     json_out_path = r"CaseReports.json"
     cat_out_path = r"CaseReportCategories.json"
-    collector = []
-    keys = ["idx", "label", "context", "qa", "imgs"]
-    data = pd.read_excel(file_path).iloc[:, :5]
-    for r in range(len(data)):
-        d = data.iloc[r]
-        item = dict.fromkeys(keys, None)
-        item["idx"] = r
-        item["label"] = d["Classification"]
-        item["context"] = d["patient"]
-        item["qa"] = qa_parser(d["teacher"])
-        if len(item["qa"]) == 0:
-            print("idx: ", r, "qa extracting failed.")
-        item["imgs"] = img_parse(str(d["No. image"]))
-        collector.append(item)
-        print("qa ", r, " finished.")
-        print('-' * 50, "qa", '-'*50)
-        print(item["qa"])
-        print('-' * 50, "img ids", '-'*50)
-        print(item["imgs"])
-        print('-' * 110, '\n')
-    with open(json_out_path, 'w') as json_file0:
-        json.dump(collector, json_file0, indent=4)
-    cat_set = set(item["label"] for item in collector)
-    with open(cat_out_path, 'w') as json_file1:
-        json.dump(list(cat_set), json_file1, indent=4)
+    # collector = []
+    # keys = ["idx", "label", "context", "qa", "imgs"]
+    # data = pd.read_excel(file_path).iloc[:, :5]
+    # for r in range(len(data)):
+    #     d = data.iloc[r]
+    #     item = dict.fromkeys(keys, None)
+    #     item["idx"] = r
+    #     item["label"] = d["Classification"]
+    #     item["context"] = d["patient"]
+    #     item["qa"] = qa_parser(d["teacher"])
+    #     if len(item["qa"]) == 0:
+    #         print("idx: ", r, "qa extracting failed.")
+    #     item["imgs"] = img_parse(str(d["No. image"]))
+    #     collector.append(item)
+    #     print("qa ", r, " finished.")
+    #     print('-' * 50, "qa", '-'*50)
+    #     print(item["qa"])
+    #     print('-' * 50, "img ids", '-'*50)
+    #     print(item["imgs"])
+    #     print('-' * 110, '\n')
+    # with open(json_out_path, 'w') as json_file0:
+    #     json.dump(collector, json_file0, indent=4)
+    # cat_set = set(item["label"] for item in collector)
+    # with open(cat_out_path, 'w') as json_file1:
+    #     json.dump(list(cat_set), json_file1, indent=4)
+
+    # convert json to excel
+    with open(json_out_path, 'r') as f:
+        cr_json = json.load(f)
+    print("case report amount: ", len(cr_json))
+    with open(cat_out_path, 'r') as f:
+        cat_json = json.load(f)
+    print("case report categories amount:", len(cat_json))
+
+
+    # start process
+    # step 1: truncate questions and answer
+    for item in cr_json:
+        if len(item["qa"]) > 6:
+            item["qa"] = item["qa"][:6]
+
+    # step 2: add qa amount attribute
+    n_qa_max = 0
+    for item in cr_json:
+        item["n_qa"] = len(item["qa"])
+        if item["n_qa"] > n_qa_max:
+            n_qa_max = item["n_qa"]
+    print("n_qa sample: ", cr_json[0])
+    print("n_qa max: ", n_qa_max)
+
+    # step 3: split qa attribute and clean string
+    def clean_string(text):
+        return re.sub(r'^\s*\d+\.\s*', '', text)
+
+    cr_list = []
+    for item in cr_json:
+        item_new = {
+                    "idx": item["idx"],
+                    "label": item["label"],
+                    "context": item["context"],
+                    "imgs": ','.join(map(str, item["imgs"])),
+                    "n_qa": item["n_qa"]
+                   }
+        for i in range(item_new["n_qa"]):
+            item_new["q_"+str(i)], item_new["a_"+str(i)] = clean_string(item["qa"][i]["question"]), item["qa"][i]["answer"]
+        for j in range(item_new["n_qa"], 6):
+            item_new["q_" +str(j)], item_new["a_"+str(j)] = "", ""
+        cr_list.append(item_new)
+
+    # step 4: convert to pandas dataframe
+    cr_df = pd.DataFrame(cr_list)
+    cr_df.to_excel("CR.xlsx", index=False)
 
 
 if __name__ == "__main__":
