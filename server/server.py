@@ -136,16 +136,17 @@ class Model_Data(BaseModel):
 def match_kwds(text, kwd_list):
     llm = app.state.modelworker.model
     prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
-                        \nBased on the given list of categories, match the following text to similar categories\
+                        \nBased on the given list of categories, match the following text to similar categories.\
                         \nCategories list: {', '.join(kwd_list)} \
                         \nText: \"{text}\" \
-                        \nReturn format：{{\"keyword\": [matched categories list]}}"
+                        \nReturn format：{{\"kw_list\": [matched categories list]}}"
     response = llm.invoke(prompt)
     if app.state.model_type == 1:
         response = response.content
     response = re.sub(r"```json|```", "", response)
     matched_kwds = json.loads(response)
-    return matched_kwds["keyword"]
+    print(matched_kwds)
+    return matched_kwds["kw_list"]
 
 
 @app.post("/model")
@@ -253,7 +254,9 @@ async def model_inference(data: Model_Data):
         cr_id, cr_kw, cr_ctx = cr_idxs[index], cr_kws[index], cr_ctxs[index]
         prompt = patient_prompt.format(cr_ctx)
         response = llm.invoke(prompt).content
-        chatbot.history_manager.save_message(usr=data.user_id, conv_type=1, msg_type="ai", content=response, time=str(datetime.now()))
+        # Clear conversation cache when new report exercise starts
+        chatbot.clear_history(data.user_id, 1)
+        chatbot.clear_history(data.user_id, 2)
         return {
                 "user_id": data.user_id,
                 "time_span": str(datetime.now()),

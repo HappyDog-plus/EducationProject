@@ -17,7 +17,6 @@ def image_to_base64(image: Image.Image) -> str:
     return img_base64_str
 
 
-
 def img_encode(img_path: str) -> str:
     image = Image.open(img_path)
     return image_to_base64(image)
@@ -28,23 +27,27 @@ if __name__ == "__main__":
     # url = "https://4okpi1941999.vicp.fun"
     url_root = "http://127.0.0.1:8000"
 
-
     # Test: model
     url = url_root + "/model"
     # Test 1: model conversation
     # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "The weather is so bad.", "image": ""}
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "hello", "image": ""}
 
     # Test 2: searching exercises based on student input.
     # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(1), "input_text": "I want to do some exercises about Glaucoma", "image": ""}
 
     # Test 3: case report request
     # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some case report exercise about Presbyopia", "image": ""}
+    # response = requests.post(url, json=data)
+    # print(response.json())
+
 
     # Test 4: case report patient
-    # context = "A 50-year-old man with low myopia is noticing more difficulty reading with his distance glasses. He usually takes his glasses off to read but says this is becoming a hassle, and therefore he wants a new pair of glasses."
-    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(3), "input_text": f"<s>What's your gender?</s><c>{context}</c>", "image": ""}
+    # context = "A 48-year-old woman with myopia complains of progressive deterioration in distance and near vision in both eyes for the past 2 years. She can improve her vision by sliding her glasses down her nose. Her past medical history is significant for diabetes for 10 years, for which she takes glyburide. She reports blood sugar levels usually between 120 and 140 mg/dL and a recent hemoglobin A1c of 6.8%."
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(3), "input_text": f"<s>Have a good day!</s><c>{context}</c>", "image": ""}
+    # response = requests.post(url, json=data)
+    # print(response.json())
 
     # Test 5: case report doctor
     # input_text = f'''
@@ -87,29 +90,29 @@ if __name__ == "__main__":
 
 
     # Test 5: generating course
-    url = url_root + "/course_generate"
-    data = {
-                "template": """
-                                Generate a lecture script based on the following context:
+    # url = url_root + "/course_generate"
+    # data = {
+    #             "template": """
+    #                             Generate a lecture script based on the following context:
 
-                                Context:
-                                {context}
+    #                             Context:
+    #                             {context}
 
-                                question:
-                                {question}
+    #                             question:
+    #                             {question}
 
-                                Please use clear and professional language, ensuring that the script is logically coherent, accurate, and suitable for student learning. Include an introduction, main content, and a conclusion.
-                            """,
+    #                             Please use clear and professional language, ensuring that the script is logically coherent, accurate, and suitable for student learning. Include an introduction, main content, and a conclusion.
+    #                         """,
 
-                "question": "What is eye?"
+    #             "question": "What is eye?"
 
-           }
-    response = requests.post(url, json=data)
+    #        }
+    # response = requests.post(url, json=data)
 
-    t = datetime.now()
-    output_path = str(t.year)+"_"+str(t.month)+"_"+str(t.day)+"_"+str(t.hour)+"_"+str(t.minute)+str(t.second)+ ".json"
-    with open(output_path, 'w') as json_file:
-        json.dump(response.json(), json_file, indent=4)
+    # t = datetime.now()
+    # output_path = str(t.year)+"_"+str(t.month)+"_"+str(t.day)+"_"+str(t.hour)+"_"+str(t.minute)+str(t.second)+ ".json"
+    # with open(output_path, 'w') as json_file:
+    #     json.dump(response.json(), json_file, indent=4)
 
 
     # Test 6: Summary

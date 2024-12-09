@@ -17,7 +17,6 @@ from server.constants import system_messages
 from server.llava_custom import Custom_LLaVA
 
 
-
 # used path
 current_dir = Path(__file__).resolve().parent
 data_dir = current_dir.parent / "local_data"
@@ -84,13 +83,11 @@ class HistoryManager:
         with open(f_p, "w") as f:
             json.dump(msgs, f, indent=4)
 
-    def load_messages(self, usr: str, conv_type: int, ctx_size: int) -> List[BaseMessage]:
+    def load_messages(self, usr: str, conv_type: int) -> List[BaseMessage]:
         # if accidently the file is small, ignore content in the previous file
         f_p = self.__get_file(usr, conv_type)
         with open(f_p, "r") as f:
             msgs = json.load(f)
-        if len(msgs) > ctx_size:
-            msgs = msgs[-ctx_size:]
         res = []
         for msg in msgs:
             if msg["msg_type"] == "ai":
@@ -99,13 +96,13 @@ class HistoryManager:
                 res.append(HumanMessage(content=msg["content"]))
         return res
 
-    def load_history(self, ctx_sizes: List) -> Dict:
+    def load_history(self) -> Dict:
         history = {}
         for usr in self.__usrs:
             for t in self.__conv_types:
                 history[(usr, t)] = InMemoryHistory()
                 history[(usr, t)].add_messages([SystemMessage(content=system_messages[t])])
-                usr_ai_msgs = self.load_messages(usr, t, ctx_sizes[t])
+                usr_ai_msgs = self.load_messages(usr, t)
                 history[(usr, t)].add_messages(usr_ai_msgs)
         return history
 
@@ -148,8 +145,7 @@ class ModelWorker:
             # caching layer for chat models (reducing the number of API calls)
             set_llm_cache(InMemoryCache())
         self.history_manager = HistoryManager()
-        self.ctx_window = [5, 1, 1]
-        self.user_chat_history = self.history_manager.load_history(ctx_sizes=self.ctx_window)
+        self.user_chat_history = self.history_manager.load_history()
         self.chat_bot = RunnableWithMessageHistory(
                                                         runnable=self.model,
                                                         get_session_history=self.__get_user_history,
@@ -174,35 +170,23 @@ class ModelWorker:
                                                      )
 
     def __get_user_history(self, user_id: str, conv_type: int) -> InMemoryHistory:
-        # it must exists, reduce redundance.
-        if (user_id, conv_type) not in self.user_chat_history:
-            self.user_chat_history[(user_id, conv_type)] = InMemoryHistory()
-            return self.user_chat_history[(user_id, conv_type)]
-        else:
-            # delete history
-            self.user_chat_history[(user_id, conv_type)].messages = trim_messages(
-                        self.user_chat_history[(user_id, conv_type)].messages,
-                        strategy="last",
-                        token_counter=len,
-                        max_tokens=self.ctx_window[conv_type],
-                        # start_on="human",
-                        include_system=True
-                    )
-            if len(self.user_chat_history[(user_id, conv_type)].messages) >= 2 and not isinstance(self.user_chat_history[(user_id, conv_type)].messages[-2], SystemMessage):
-                last_request = self.user_chat_history[(user_id, conv_type)].messages[-2]
-                if isinstance(last_request, HumanMessage):
-                    self.history_manager.save_message(user_id, conv_type, "human", last_request.content, str(datetime.now()))
-                last_response = self.user_chat_history[(user_id, conv_type)].messages[-1]
-                if isinstance(last_response, AIMessage):
-                    self.history_manager.save_message(user_id, conv_type, "ai", last_response.content, str(datetime.now()))
-
-            return self.user_chat_history[(user_id, conv_type)]
+        self.user_chat_history[(user_id, conv_type)].messages = trim_messages(
+                                                                                self.user_chat_history[(user_id, conv_type)].messages,
+                                                                                strategy="last",
+                                                                                token_counter=len,
+                                                                                max_tokens=5,
+                                                                                # start_on="human",
+                                                                                include_system=True
+                                                                             ) 
+        return self.user_chat_history[(user_id, conv_type)]
 
     def __format_sys_msg(self, usr: str, conv_type: int, msg: str):
         # parse related information
         c = re.findall('<c>(.*?)</c>', msg)
         q = re.findall('<q>(.*?)</q>', msg)
         d = re.findall('<d>(.*?)</d>', msg)
+        # bug: each time we need to format the background information
+        self.user_chat_history[(usr, conv_type)].messages[0].content = system_messages[conv_type]
         if len(q) == 0:
             # patient stage
             self.user_chat_history[(usr, conv_type)].messages[0].content = self.user_chat_history[(usr, conv_type)].messages[0].content.format(c[0])
@@ -216,10 +200,15 @@ class ModelWorker:
             response = response.content
         return response
 
+    def clear_history(self, usr_id: str, conv_type: int):
+        self.user_chat_history[(usr_id, conv_type)].clear()
+        # bug: After clear msg queue, a system msg should be appended
+        self.user_chat_history[(usr_id, conv_type)].add_messages([SystemMessage(content=system_messages[conv_type])])
+        
     def invoke(self, usr_id: str, conv_type: int, msg: str) -> str:
         # if the usr never use system, create usr folder and 0 files, reload history
         if not self.history_manager.make_sure_usr(usr_id):
-            self.user_chat_history = self.history_manager.load_history(ctx_sizes=self.ctx_window)
+            self.user_chat_history = self.history_manager.load_history()
         if conv_type == 0:
             human_msg = HumanMessage(content=msg)
         else:
@@ -227,41 +216,16 @@ class ModelWorker:
             self.__format_sys_msg(usr=usr_id, conv_type=conv_type, msg=msg)
             human_msg = HumanMessage(content=(re.findall('<s>(.*?)</s>', msg)[0]))
         response = self.__invoke(usr_id, conv_type, human_msg)
+        # bug: Should write to disk after each invoke. Otherwise, quit program the last message will be saved twice.
+        # If response successfully, at least 2 messages in the msg queue
+        if response:
+            last_request = self.user_chat_history[(usr_id, conv_type)].messages[-2]
+            self.history_manager.save_message(usr_id, conv_type, "human", last_request.content, str(datetime.now()))
+            last_response = self.user_chat_history[(usr_id, conv_type)].messages[-1]
+            self.history_manager.save_message(usr_id, conv_type, "ai", last_response.content, str(datetime.now()))
         return response
-
 
 if __name__ == '__main__':
     from config import set_environment
     set_environment()
-    # Test HistoryManager()
-    # history = HistoryManager()
-    # history.save_message(usr="usr1", conv_type=1, msg_type="human", content="The 1 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=1, msg_type="ai", content="The 2 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=1, msg_type="human", content="The 3 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=1, msg_type="ai", content="The 4 message", time=str(datetime.now()))
-
-    # history.save_message(usr="usr1", conv_type=0, msg_type="human", content="The 1 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=0, msg_type="ai", content="The 2 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=0, msg_type="human", content="The 3 message", time=str(datetime.now()))
-    # history.save_message(usr="usr1", conv_type=0, msg_type="ai", content="The 4 message", time=str(datetime.now()))
-
-    # history.save_message(usr="usr2", conv_type=2, msg_type="human", content="The 1 message", time=str(datetime.now()))
-    # history.save_message(usr="usr2", conv_type=2, msg_type="ai", content="The 2 message", time=str(datetime.now()))
-    # history.save_message(usr="usr2", conv_type=2, msg_type="human", content="The 3 message", time=str(datetime.now()))
-    # history.save_message(usr="usr2", conv_type=2, msg_type="ai", content="The 4 message", time=str(datetime.now()))
-
-    # msgs = history.load_messages(usr="usr2", conv_type=2, ctx_size=5)
-    # print(msgs)
-    # history_msgs = history.load_history(ctx_size=5)
-    # print(history_msgs)
-
-    # Test Model Worker
-    # model = ModelWorker(model_type=1)
-    # response = model.invoke(usr_id="usr1", conv_type=0, msg="Hello")
-    # response = model.invoke(usr_id="usr1", conv_type=0, msg="I'm Peter. How are you?")
-    # response = model.invoke(usr_id="usr1", conv_type=0, msg="what's the answer of 1 + 1?")
-    # response = model.invoke(usr_id="usr1", conv_type=0, msg="Are you a boy or a girl?")
-    # response = model.invoke(usr_id="usr1", conv_type=0, msg="Bye Bye.")
-    # # print(response)
-
     pass
