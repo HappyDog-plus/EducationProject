@@ -36,7 +36,7 @@ local_data/CaseReportImgs/
 local_data/VectorStore/
 local_data/*.xlsx
 local_data/ModelWeights
-local_data/data/
+local_data/BLIP2/
 local_data/data.zip
 
 client/audio

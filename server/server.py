@@ -11,7 +11,6 @@ from pydub import AudioSegment
 import logging
 import os
 import json
-import pandas as pd
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_core.runnables import RunnablePassthrough
@@ -20,8 +19,18 @@ from langchain_core.prompts import ChatPromptTemplate
 import requests
 import re
 from server.xunfei import xunfei_recognize
-from server.util import ModelWorker
-from server.constants import patient_prompt, doctor_prompt, no_match
+from server.util import ModelWorker, blip2
+from server.constants import (patient_prompt, 
+                              doctor_prompt,
+                              no_match, 
+                              image_request, 
+                              image_caption, 
+                              extract_medical_kwds,
+                              to_english, 
+                              match_keywords, 
+                              evaluate_answer,
+                              generate_explainment)
+import ast
 
 def current_time():
     t = datetime.now()
@@ -58,13 +67,14 @@ async def lifespan(app: FastAPI):
     # initialize chatbot (local_model: 0, openai_api: 1)
     app.state.model_type = 1
     app.state.modelworker = ModelWorker(model_type=1)
+    app.state.imgRetriever = blip2()
     # Exercise data
-    ex_cat_path = data_dir / "ExerciseCategories.xlsx"
-    ex_path = data_dir / "Exercises.xlsx"
-    ex_cat_df = pd.read_excel(ex_cat_path, header=0)
-    app.state.ex_keywords = ex_cat_df.iloc[:, 0].dropna().tolist()
-    ex_df = pd.read_excel(ex_path)
-    app.state.ex_questions = ex_df.iloc[:, 9].dropna().tolist()
+    ex_cat_path = data_dir / "exerciseCategories.json"
+    ex_path = data_dir / "exercises.json"
+    with open(ex_cat_path, 'r') as f:
+        app.state.ex_keywords = json.load(f)
+    with open(ex_path, 'r') as f:
+        app.state.ex_questions = json.load(f)
     # Case report data
     cr_cat_path = data_dir / "CaseReportCategories.json"
     with open(cr_cat_path, "r") as f:
@@ -133,20 +143,51 @@ class Model_Data(BaseModel):
     image: str
 
 
-def match_kwds(text, kwd_list):
+def translate_to_english(input_text):
     llm = app.state.modelworker.model
-    prompt = f"You are an expert in ophthalmology, and you need to complete the given tasks strictly in accordance with the format requirements.\
-                        \nBased on the given list of categories, match the following text to similar categories.\
-                        \nCategories list: {', '.join(kwd_list)} \
-                        \nText: \"{text}\" \
-                        \nReturn format：{{\"kw_list\": [matched categories list]}}"
+    prompt = to_english.format(input_text)
+    return llm.invoke(prompt).content
+
+def match_kwds(input_text):
+    llm = app.state.modelworker.model
+    input_text = translate_to_english(input_text)
+    print(input_text)
+    query = input_text
+    kwds = app.state.ex_keywords
+    prompt = match_keywords.format(', '.join(kwds), query)
+    response = llm.invoke(prompt).content
+    print(response)
+    matches = re.findall(r"```json(.*?)```", response, re.DOTALL)
+    if len(matches):
+        response = matches[0]
+        matched_kwds = json.loads(response)
+        return matched_kwds
+    else:
+        return []
+    
+def match_ex(kwds):
+    ex_list = app.state.ex_questions
+    return_list = []
+    for kwd in kwds:
+        for ex in ex_list:
+            if kwd in ex["cats"] and ex["id"] not in return_list:
+                return_list.append(ex["id"])
+    return return_list
+
+
+def extract_kwds(text):
+    prompt = extract_medical_kwds.format(text)
+    llm = app.state.modelworker.model
     response = llm.invoke(prompt)
     if app.state.model_type == 1:
         response = response.content
+    # print(response)
     response = re.sub(r"```json|```", "", response)
-    matched_kwds = json.loads(response)
-    print(matched_kwds)
-    return matched_kwds["kw_list"]
+    print(response)
+    parsed_list = ast.literal_eval(response)
+    print(parsed_list)
+    # print(type(parsed_list))
+    return ", ".join(parsed_list)
 
 
 @app.post("/model")
@@ -164,6 +205,22 @@ async def model_inference(data: Model_Data):
     llm = app.state.modelworker.model
 
     if data.mode_code == 0:
+        # img returning necessarity
+        prompt = image_request.format(data.input_text)
+        img_flag = llm.invoke(prompt).content
+        if int(img_flag):
+            kwds = extract_kwds(data.input_text)
+            txt, img_base64 = app.state.imgRetriever.naive_img_retrieve(kwds, 8)
+            print(app.state.imgRetriever.cnts)
+            caption_prompt = image_caption.format(txt)
+            response = llm.invoke(caption_prompt).content
+            return {
+                    "user_id": data.user_id, 
+                    "time_span": str(datetime.now()), 
+                    "mode_code": data.mode_code, 
+                    "output_text": response,
+                    "image": img_base64
+                   }
         # GPT and local model have different style prompt.
         if app.state.model_type == 0:
             prompt = ""
@@ -191,13 +248,14 @@ async def model_inference(data: Model_Data):
         return {"user_id": data.user_id, 
                 "time_span": str(datetime.now()), 
                 "mode_code": data.mode_code, 
-                "output_text": response}
+                "output_text": response,
+                "image": ""}
 
     elif data.mode_code == 1:
         user_id = data.user_id
-        course_ids = ["26", "27", "38", "42"]
+        course_ids = ['26', '43', '42', '38', '44', '27']
         question_ids = []
-        url_excercise = "http://120.26.66.32:18080/api/v1/getExercise"
+        url_excercise = "http://43.129.224.174:8080/api/v1/getExercise"
         start = time.time()
         for course_id in course_ids:
             param = {
@@ -213,18 +271,24 @@ async def model_inference(data: Model_Data):
                             question_ids.append(item['question_id'])
                         else:
                             logger.info(f"Item in response does not contain 'question_id'.")
+
                 except json.JSONDecodeError:
                     logger.error(f"Failed to parse JSON for course_id {course_id}.")
             else:
                 logger.error(f"Request for course_id {course_id} failed. Status code: {response.status_code}")
         question_history = sorted(set(question_ids))
-        keyword_list = match_kwds(data.input_text, app.state.ex_keywords)
-        question_list = app.state.ex_questions
-        indices = [i + 1 for i, item in enumerate(question_list) if item in keyword_list]
+        print(data.input_text)
+        keyword_list = match_kwds(data.input_text)
+        print(keyword_list)
+        indices = match_ex(keyword_list)
+        print(indices)
+        print(question_history)
         filtered_indices = set(indices) - set(question_history)
+        print(filtered_indices)
         string_indices = [str(index) for index in filtered_indices]
         result_indices = string_indices[:10]
         end = time.time()
+        print(result_indices)
         logger.info("Inference time: " + str(end - start))
         return {"user_id": data.user_id,
                 "time_span": str(datetime.now()),
@@ -283,6 +347,7 @@ async def model_inference(data: Model_Data):
             c = re.findall('<c>(.*?)</c>', data.input_text)[0]
             prompt = doctor_prompt.format(q, c)
             response = llm.invoke(prompt).content
+            chatbot.clear_history(data.user_id, 2)
         return {
             "user_id": data.user_id,
             "time_span": str(datetime.now()),
@@ -302,15 +367,7 @@ class Course_Invoke_Data(BaseModel):
 
 # Function to invoke OpenAI and get a semantic comparison
 def evaluate_ans(question, correct_ans, user_ans):
-    prompt = f'''
-    Question: 
-    {question}
-    Correct Answer: 
-    {correct_ans}
-    Student Answer: 
-    {user_ans}
-    Task: Based on the correct answer provided, determine if the student answer is correct. If the student answer is correct, return 1; otherwise, return 0. Only provide the number 0 or 1 as the output.
-    '''
+    prompt = evaluate_answer.format(question, correct_ans, user_ans)
     response = app.state.modelworker.model.invoke(prompt)
     if app.state.model_type == 1:
         response = response.content
@@ -319,15 +376,7 @@ def evaluate_ans(question, correct_ans, user_ans):
 
 # Function to invoke OpenAI and get an explanation
 def get_explanation(question, correct_ans, user_ans):
-    prompt = f'''
-    Question: 
-    {question}
-    Correct answer: 
-    {correct_ans}
-    Student wrong answer: 
-    {user_ans}
-    Task: Evaluate the student answer based on the question and correct answer provided. Offer feedback that is objective, concise, logically clear.
-    '''
+    prompt = generate_explainment.format(question, correct_ans, user_ans)
     response = app.state.modelworker.model.invoke(prompt)
     if app.state.model_type == 0:
         response = response.content

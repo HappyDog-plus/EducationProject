@@ -13,14 +13,115 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_core.runnables import ConfigurableFieldSpec
 from datetime import datetime
 import re
+import shutil
 from server.constants import system_messages
 from server.llava_custom import Custom_LLaVA
-
+import torch
+import numpy as np
+from lavis.models import load_model_and_preprocess
+from PIL import Image
+import io
+import base64
+import random
 
 # used path
 current_dir = Path(__file__).resolve().parent
 data_dir = current_dir.parent / "local_data"
 
+
+class blip2:
+
+    def __init__(self):
+
+        self.max_candidates = 10
+        self.device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+        self.data_path = data_dir/"BLIP2"
+        texts_embedding = np.load(self.data_path/"text_embeddings1.npy")
+        self.texts_embedding = torch.tensor(texts_embedding).to(self.device)
+        self.model, self.vis_processor, self.txt_processor = load_model_and_preprocess(
+                                                                                        name="blip2_feature_extractor",
+                                                                                        model_type="pretrain", 
+                                                                                        is_eval=True,
+                                                                                        device=self.device   
+                                                                                      )
+        with open(self.data_path/"merged_caption.json", 'r', encoding='utf-8') as f:
+            self.image_map = json.load(f)
+        self.texts = []
+        self.names = []
+        self.paths = []
+        # bug: windows file system is different from linux file system in file name order.
+        all_entries = os.listdir(self.data_path)
+        dirs = [entry for entry in all_entries if os.path.isdir(os.path.join(self.data_path, entry))]
+        dirs = sorted(dirs, key=str.lower)
+        for dir in dirs:
+            name_images = os.listdir(self.data_path/dir)
+            name_images = sorted(name_images)
+            for name_image in name_images:
+                self.texts.append(self.image_map[dir+"/"+name_image])
+                self.names.append(dir+"/"+name_image)
+                self.paths.append(self.data_path/dir/name_image)
+        self.data_size = len(self.names)
+        self.cnts = {}
+        
+    def find_images(self, text_target: str, num_retrieval: int) -> Dict:
+        retrieval_map = []
+        image_input = torch.rand(1, 3, 224, 224).to(self.device)
+        text_input = self.txt_processor["eval"](text_target)
+        sample = {"image": image_input, "text_input": [text_input]}
+        text_emb = self.model.extract_features(sample, mode="text").text_embeds[0,0,:]
+        text_emb /= text_emb.norm(dim=-1, keepdim=True)
+        text_emb = text_emb.cpu().detach().numpy()
+        similarity_vector = self.texts_embedding.cpu().detach().numpy() @ text_emb.T
+        index_sorted = np.argsort(similarity_vector)
+        for i in range(1, num_retrieval+1):
+            idx = index_sorted[self.data_size-i]
+            # print("Index: ", idx)
+            # print("Similarity: ", similarity_vector[idx])
+            # print("Name: ", self.names[idx])
+            # print("Text: ", self.texts[idx])
+            # print("Path: ", self.paths[idx])
+            retrieval_map.append((self.names[idx], self.paths[idx], self.texts[idx], similarity_vector[idx]))
+        return retrieval_map
+    
+    def naive_img_retrieve(self, kwd: str, top_k: int) -> tuple:
+        probs = []
+        items = self.find_images(kwd, top_k)
+        # bug: retrieval map start from 1
+        # img_name, img_path, txt, _ = retrieval_map[1]
+        # Algorithm Design: find the most related image, exploration and exploitation
+        for i in range(top_k):
+            if items[i][0] not in self.cnts:
+                self.cnts[items[i][0]] = 1
+                return (items[i][2], img_encode(items[i][1])) 
+            else:
+                probs.append(1 / self.cnts[items[i][0]])
+        sum_probs = sum(probs)
+        probs_norm = [x / sum_probs for x in probs]
+        idxs = [i for i in range(top_k)]
+        idx = random.choices(idxs, probs_norm, k=1)[0]
+        img_name, img_path, txt, _ = items[idx]
+        self.cnts[img_name] += 1
+        return (txt, img_encode(img_path))
+
+def save_to_dir(save_path: Path, retrieval_map: Dict) -> None:
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    for i in range(1, len(retrieval_map)+1):
+        img_name, img_path, _, _ = retrieval_map[i]
+        img_save_path = save_path / img_name
+        shutil.copy(img_path, img_save_path)
+
+def image_to_base64(image: Image.Image) -> str:
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    img_bytes = buffered.getvalue()
+    img_base64 = base64.b64encode(img_bytes)
+    img_base64_str = img_base64.decode("utf-8")
+    return img_base64_str
+
+def img_encode(img_path: str) -> str:
+    image = Image.open(img_path)
+    return image_to_base64(image)
 
 class InMemoryHistory(BaseChatMessageHistory, BaseModel):
     # In memory implementation of chat message history.
@@ -32,7 +133,6 @@ class InMemoryHistory(BaseChatMessageHistory, BaseModel):
 
     def clear(self) -> None:
         self.messages = []
-
 
 class HistoryManager:
 
@@ -117,7 +217,6 @@ class HistoryManager:
         else:
             return True
 
-
 class ModelWorker:
     def __init__(self, model_type: int):
         # 0 openai api, 1 local model
@@ -201,9 +300,10 @@ class ModelWorker:
         return response
 
     def clear_history(self, usr_id: str, conv_type: int):
-        self.user_chat_history[(usr_id, conv_type)].clear()
-        # bug: After clear msg queue, a system msg should be appended
-        self.user_chat_history[(usr_id, conv_type)].add_messages([SystemMessage(content=system_messages[conv_type])])
+        if (usr_id, conv_type) in self.user_chat_history:
+            self.user_chat_history[(usr_id, conv_type)].clear()
+            # bug: After clear msg queue, a system msg should be appended
+            self.user_chat_history[(usr_id, conv_type)].add_messages([SystemMessage(content=system_messages[conv_type])])
         
     def invoke(self, usr_id: str, conv_type: int, msg: str) -> str:
         # if the usr never use system, create usr folder and 0 files, reload history
@@ -228,4 +328,11 @@ class ModelWorker:
 if __name__ == '__main__':
     from config import set_environment
     set_environment()
+    blip2 = blip2()
+    text_target = "eveitis"
+    # save_path = data_dir / text_target
+    # similarity_map = blip2.find_image(text_target, 10)
+    # save_to_dir(save_path, similarity_map)
+    text, img = blip2.retrieve_img_txt_pair(text_target)
+    print(text)
     pass
