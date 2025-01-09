@@ -24,23 +24,24 @@ def img_encode(img_path: str) -> str:
 
 
 if __name__ == "__main__":
-    url_root = "http://43.129.224.174:6000"
+    # url_root = "http://43.129.224.174:6000"
+    url_root = "http://127.0.0.1:8001"
     # url_root = ""
 
     # Test: model
-    url = url_root + "/model"
+    # url = url_root + "/model"
     # Test 1: model conversation
     # img_path = Path("image") / "test_img.jpg"
     # img_base64 = img_encode(img_path)
-    data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "hello", "image": ""}
+    # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(0), "input_text": "hello", "image": ""}
 
     # Test 2: searching exercises based on student input.
     # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(1), "input_text": "I want to do some exercises about Glaucoma", "image": ""}
 
     # Test 3: case report request
     # data = { "user_id": "userInfo1", "time_span": str(datetime.now()), "mode_code": int(2), "input_text": "I want to do some case report exercise about Presbyopia", "image": ""}
-    response = requests.post(url, json=data)
-    print(response.json())
+    # response = requests.post(url, json=data)
+    # print(response.json())
 
 
     # Test 4: case report patient
@@ -125,5 +126,11 @@ if __name__ == "__main__":
     # response = requests.post(url, json=data)
     # print(response.json())
 
+    # Test 8: Medrag
+    url = url_root + "/rag_answer"
+    data = {
+            "medical_question": "the nasolacrimal canal extends into what part of the nose?"
+           }
+    response = requests.post(url, json=data)
 
     pass

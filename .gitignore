@@ -38,7 +38,7 @@ local_data/*.xlsx
 local_data/ModelWeights
 local_data/BLIP2/
 local_data/data.zip
-
+local_data/BLIP2.rar
 client/audio
 client/image
 
@@ -49,3 +49,7 @@ client/image
 server/log
 server/audio_saved
 server/chat_history
+
+# MedRAG corpus and vectors
+module_RAG/medrag/corpus
+module_RAG/medrag/corpus.tar.gz

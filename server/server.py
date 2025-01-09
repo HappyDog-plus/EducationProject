@@ -29,7 +29,9 @@ from server.constants import (patient_prompt,
                               to_english, 
                               match_keywords, 
                               evaluate_answer,
-                              generate_explainment)
+                              generate_explainment,
+                              if_rag,
+                              rag_answer)
 import ast
 
 def current_time():
@@ -148,12 +150,11 @@ def translate_to_english(input_text):
     prompt = to_english.format(input_text)
     return llm.invoke(prompt).content
 
-def match_kwds(input_text):
+def match_kwds(input_text, kwds):
     llm = app.state.modelworker.model
     input_text = translate_to_english(input_text)
     print(input_text)
     query = input_text
-    kwds = app.state.ex_keywords
     prompt = match_keywords.format(', '.join(kwds), query)
     response = llm.invoke(prompt).content
     print(response)
@@ -165,6 +166,7 @@ def match_kwds(input_text):
     else:
         return []
     
+
 def match_ex(kwds):
     ex_list = app.state.ex_questions
     return_list = []
@@ -205,7 +207,7 @@ async def model_inference(data: Model_Data):
     llm = app.state.modelworker.model
 
     if data.mode_code == 0:
-        # img returning necessarity
+        # test img 
         prompt = image_request.format(data.input_text)
         img_flag = llm.invoke(prompt).content
         if int(img_flag):
@@ -220,6 +222,27 @@ async def model_inference(data: Model_Data):
                     "mode_code": data.mode_code, 
                     "output_text": response,
                     "image": img_base64
+                   }
+        # test medrag
+        prompt = if_rag.format(data.input_text)
+        rag_flag = llm.invoke(prompt).content
+        # print(rag_flag)
+        if int(rag_flag):
+            url = "http://127.0.0.1:8001/rag_answer"
+            rag_input = {
+                            "medical_question": data.input_text
+                        }
+            response = requests.post(url, json=rag_input).json()
+            # print(response["result"])
+            # print(response["analysis"])
+            prompt = rag_answer.format(response["result"], response["analysis"])
+            response = llm.invoke(prompt).content
+            return {
+                    "user_id": data.user_id, 
+                    "time_span": str(datetime.now()), 
+                    "mode_code": data.mode_code, 
+                    "output_text": response,
+                    "image": ""
                    }
         # GPT and local model have different style prompt.
         if app.state.model_type == 0:
@@ -278,7 +301,7 @@ async def model_inference(data: Model_Data):
                 logger.error(f"Request for course_id {course_id} failed. Status code: {response.status_code}")
         question_history = sorted(set(question_ids))
         print(data.input_text)
-        keyword_list = match_kwds(data.input_text)
+        keyword_list = match_kwds(data.input_text, app.state.ex_keywords)
         print(keyword_list)
         indices = match_ex(keyword_list)
         print(indices)
@@ -296,7 +319,9 @@ async def model_inference(data: Model_Data):
                 "question_ids": result_indices}
 
     elif data.mode_code == 2:
+        print(data.input_text)
         keyword_list = match_kwds(data.input_text, app.state.cr_keywords)
+        print(keyword_list)
         if len(keyword_list) == 0:
             return {
                         "user_id": data.user_id,
@@ -378,7 +403,7 @@ def evaluate_ans(question, correct_ans, user_ans):
 def get_explanation(question, correct_ans, user_ans):
     prompt = generate_explainment.format(question, correct_ans, user_ans)
     response = app.state.modelworker.model.invoke(prompt)
-    if app.state.model_type == 0:
+    if app.state.model_type == 1:
         response = response.content
     return response
 

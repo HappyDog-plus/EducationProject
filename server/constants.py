@@ -105,6 +105,16 @@ match_keywords = '''
                     Return format: [matched categories]
                  '''
 
+# evaluate_answer = '''
+#                     Question: 
+#                     {}
+#                     Correct Answer: 
+#                     {}
+#                     Student Answer: 
+#                     {}
+#                     Task: Based on the correct answer provided, determine if the student answer is correct. If the student answer is correct, return 1; otherwise, return 0. Only provide the number 0 or 1 as the output.
+#                   '''
+
 evaluate_answer = '''
                     Question: 
                     {}
@@ -112,8 +122,18 @@ evaluate_answer = '''
                     {}
                     Student Answer: 
                     {}
-                    Task: Based on the correct answer provided, determine if the student answer is correct. If the student answer is correct, return 1; otherwise, return 0. Only provide the number 0 or 1 as the output.
-                  '''
+                    Task: Assume you are an ophthalmology teacher tasked with evaluating whether a student's answer is correct or incorrect based on the given question and answer. The grading standard is lenient, allowing partially correct answers to be considered correct. If the answer is correct, return 1; if incorrect, return 0. Provide only the number 0 or 1 as the output.
+                '''
+
+# generate_explainment = '''
+#                         Question: 
+#                         {}
+#                         Correct answer: 
+#                         {}
+#                         Student wrong answer: 
+#                         {}
+#                         Task: Evaluate the student answer based on the question and correct answer provided. Offer feedback that is objective, concise, logically clear.
+#                        '''
 
 generate_explainment = '''
                         Question: 
@@ -122,6 +142,24 @@ generate_explainment = '''
                         {}
                         Student wrong answer: 
                         {}
-                        Task: Evaluate the student answer based on the question and correct answer provided. Offer feedback that is objective, concise, logically clear.
+                        Task: Assume you are an ophthalmology teacher. Evaluate the student answer based on the question and correct answer provided. Assess whether the student's response is correct or incorrect, and provide corresponding feedback and explanations. Ensure your response is empathetic, encouraging, concise, and professional. Provide only the response to the students.                       
                        '''
+
+if_rag = '''
+            This is a request sent by the student to the model. The text of the request is as follows:
+
+            Text: {}
+
+            Using the capabilities of the GPT model, analyze the conversation. If the student's dialogue indicates they are asking a medical-related question, particularly in the field of ophthalmology, return a 1. If the student does not ask a question, return a 0. Make sure that the returned content only contains the numbers 1 or 0, with no other characters included.
+        '''
+
+rag_answer = '''
+                Given the following response and its explanation:
+
+                Answer: {}
+
+                Explanation: {}
+
+                Could you please synthesize the provided information into a logically coherent passage that naturally and accurately rephrases the answer and its explanation without referring to any literature support or mentioning any documents?"
+            '''
 

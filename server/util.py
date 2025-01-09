@@ -34,7 +34,7 @@ class blip2:
     def __init__(self):
 
         self.max_candidates = 10
-        self.device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.data_path = data_dir/"BLIP2"
         texts_embedding = np.load(self.data_path/"text_embeddings1.npy")
         self.texts_embedding = torch.tensor(texts_embedding).to(self.device)
@@ -144,6 +144,9 @@ class HistoryManager:
         if not os.path.exists(self.__chat_history_path):
             os.makedirs(self.__chat_history_path)
         all_items = os.listdir(self.__chat_history_path)
+        # jupyter notebook checkpoint folder
+        if ".ipynb_checkpoints" in all_items:
+            all_items.remove(".ipynb_checkpoints")
         self.__usrs = [item for item in all_items if os.path.isdir(os.path.join(self.__chat_history_path, item))]
         # 2 types of conversation types (0 normal, 1 case report patient, 2 case report doctor)
         self.__conv_types = [0, 1, 2]
@@ -219,7 +222,7 @@ class HistoryManager:
 
 class ModelWorker:
     def __init__(self, model_type: int):
-        # 0 openai api, 1 local model
+        # 1 openai api, 0 local model
         self.model_type = model_type
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if self.model_type == 0:
